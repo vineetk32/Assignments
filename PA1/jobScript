@@ -1,0 +1,12 @@
+#! /bin/csh
+source /usr/local/lsf/conf/cshrc.lsf
+#BSUB -o sout.%J		# stdout log format
+#BSUB -e serr.%J		# stderr log format
+#BSUB -R "span[ptile=1]	select[ncpus=2]" 
+	# to ensure 1 process per node with 2 cpus.
+#BSUB -n 4			# number of nodes
+
+setenv	OMP_NUM_THREADS	2	# number of threads ( static )
+cd /gpfs_share/csc548/vineet
+mpiexec ./matrixMult_mpi.x -d /gpfs_share/csc548/vineet -pwr 2
+	# change the path "/gpfs_share/csc548/my unity id" to the path of your own scratch directo
