@@ -1,6 +1,6 @@
 #---- Students, modify CC and CFLAGS as appropriate in your environment
 CC = gcc
-#CFLAGS = -fopenmp
+CFLAGS = -fopenmp -m32
 
 LIB = -lm -lc
 
