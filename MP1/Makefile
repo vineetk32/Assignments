@@ -1,6 +1,6 @@
 #---- Students, modify CC and CFLAGS as appropriate in your environment
 CC = gcc
-CFLAGS = -g
+CFLAGS = -O3
 
 LIB = -lm -lc -lrt
 
