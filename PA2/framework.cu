@@ -3,7 +3,7 @@
 #include <cuda_runtime.h>
 #include <time.h>
 
-//#define __DEBUG
+#define __DEBUG
 
 #define element_addr(a, m, n, d) (a + ((m) * (d) + n))
 #define element(a, m, n, d) (((m >= 0)&&(m < d)&&(n >= 0)&&(n < d))? (a[(m) * (d) + n]) : 0) 
@@ -103,7 +103,8 @@ int main(int argc, char **argv)
 	for( i = 0; i < d; i++ ) {
 		for( j = 0; j < d; j++ ) {
 			fprintf(fp, "%f ", element(honeyr, i, j, d));
-			if(element(honey[resin], i, j, d) != element(honeyr, i, j, d) ) {
+			if( fabs( (element(honey[resin], i, j, d) - element(honeyr, i, j, d)) / element(honey[resin], i, j, d) ) > 0.0001) {
+			//if(element(honey[resin], i, j, d) != element(honeyr, i, j, d) ) {
 				printf("<%d, %d>:%f %f\n", i, j, element(honey[resin], i, j, d), element(honeyr, i, j, d));
 				n++;
 			}
@@ -116,6 +117,7 @@ int main(int argc, char **argv)
 
 	free(honey[0]);
 	free(honey[1]);
+	free(honeyr);
 	free(living);
 
 	return 0;
