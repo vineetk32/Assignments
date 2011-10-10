@@ -3,7 +3,7 @@
 #include <cuda_runtime.h>
 #include <time.h>
 
-#define __DEBUG
+//#define __DEBUG
 
 #define element_addr(a, m, n, d) (a + ((m) * (d) + n))
 #define element(a, m, n, d) (((m >= 0)&&(m < d)&&(n >= 0)&&(n < d))? (a[(m) * (d) + n]) : 0) 

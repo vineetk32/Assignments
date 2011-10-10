@@ -1,6 +1,6 @@
 #PBS -l nodes=1:ppn=16,cput=00:02:00
-#PBS -o my_gpu_text.out
+#PBS -o my_gpu_text.out.2048_32
 
 echo PBS_QUEUE is $PBS_QUEUE
 
-your_path/beehive your_path/my_input.txt
+/home/temp542/PA2/beehive /home/temp542/PA2/out2048.txt

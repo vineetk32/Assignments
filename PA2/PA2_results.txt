@@ -1,0 +1,75 @@
+[temp542@login-0-0 PA2]$ more my_gpu_text.out.16
+PBS_QUEUE is gtx480
+GPU computation: 16.692225 msec
+GPU end-to-end: 0.020000 sec
+CPU computation: 0.000000 sec
+error: 0
+[temp542@login-0-0 PA2]$ more my_gpu_text.out.1024
+PBS_QUEUE is gtx480
+GPU computation: 933.361267 msec
+GPU end-to-end: 0.950000 sec
+CPU computation: 28.610000 sec
+error: 0
+[temp542@login-0-0 PA2]$ more script64.o13474
+PBS_QUEUE is gtx480
+GPU computation: 28.871231 msec
+GPU end-to-end: 0.030000 sec
+CPU computation: 0.110000 sec
+error: 0
+[temp542@login-0-0 PA2]$ more script256.o13476
+PBS_QUEUE is gtx480
+GPU computation: 59.429184 msec
+GPU end-to-end: 0.060000 sec
+CPU computation: 1.750000 sec
+error: 0
+
+
+::::::::::::::
+my_gpu_text.out.2048_1
+::::::::::::::
+PBS_QUEUE is gtx480
+GPU computation: 11471.884766 msec
+GPU end-to-end: 11.510000 sec
+CPU computation: 48.340000 sec
+error: 0
+::::::::::::::
+my_gpu_text.out.2048_16
+::::::::::::::
+PBS_QUEUE is gtx480
+GPU computation: 339.466034 msec
+GPU end-to-end: 0.370000 sec
+CPU computation: 48.550000 sec
+error: 0
+::::::::::::::
+my_gpu_text.out.2048_2
+::::::::::::::
+PBS_QUEUE is gtx480
+GPU computation: 3141.579834 msec
+GPU end-to-end: 3.190000 sec
+CPU computation: 46.530000 sec
+error: 0
+::::::::::::::
+my_gpu_text.out.2048_32
+::::::::::::::
+PBS_QUEUE is gtx480
+GPU computation: 339.365448 msec
+GPU end-to-end: 0.370000 sec
+CPU computation: 48.840000 sec
+error: 0
+::::::::::::::
+my_gpu_text.out.2048_4
+::::::::::::::
+PBS_QUEUE is gtx480
+GPU computation: 942.630371 msec
+GPU end-to-end: 0.980000 sec
+CPU computation: 48.490000 sec
+error: 0
+::::::::::::::
+my_gpu_text.out.2048_8
+::::::::::::::
+PBS_QUEUE is gtx480
+GPU computation: 339.326630 msec
+GPU end-to-end: 0.380000 sec
+CPU computation: 48.270000 sec
+error: 0
+[temp542@login-0-0 PA2]$
