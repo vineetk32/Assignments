@@ -8,5 +8,5 @@ source /usr/local/lsf/conf/cshrc.lsf
 
 setenv	OMP_NUM_THREADS	2	# number of threads ( static )
 cd /gpfs_share/csc548/vineet
-mpiexec ./matrixMult_mpi.x -d /gpfs_share/csc548/vineet -pwr 2
+mpiexec ./my_mm -d /gpfs_share/csc548/vineet -pwr 2
 	# change the path "/gpfs_share/csc548/my unity id" to the path of your own scratch directo

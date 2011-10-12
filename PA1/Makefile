@@ -16,11 +16,11 @@ BINDIR=.
 .c.o:	
 	$(CC) -c $(CFLAGS) $<
 
-matrixMult_mpi:  $(OBJ) $(ENVFILE)
-	$(CC) $(CFLAGS) -o ${BINDIR}/$@.x $(OBJ) $(LIB) 
+my_mm:  $(OBJ) $(ENVFILE)
+	$(CC) $(CFLAGS) -o ${BINDIR}/$@ $(OBJ) $(LIB) 
 
 clean:
-	rm -f *.o  ${BINDIR}/*.x
+	rm -f *.o  ${BINDIR}/my_mm
 
 run:
 	bsub -W 00:15 < jobScript	# You must edit my_mm.script
