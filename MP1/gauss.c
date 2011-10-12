@@ -8,7 +8,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <omp.h>
-#include <sys/time.h>
+#include <time.h>
+#include "defines.h"
 
 #define MATRIX_DIM 2000
 #define SEED 0
@@ -44,9 +45,9 @@ initMatrix()
 	srand(SEED);
 	for (i=0; i<MATRIX_DIM; i++) {
 		for (j=0; j<MATRIX_DIM; j++) {
-			A[i][j] =  100 * ((double)rand() / ((double)(RAND_MAX)+(double)(1)) ) ;
+			A[i][j] =  100 * ((double)rand() / ((double)(RAND_MAX)+(double)(1)) ) ;      
 		}
-		Y[i] = 100 * ((double)rand() / ((double)(RAND_MAX)+(double)(1)) ) ;
+		Y[i] = 100 * ((double)rand() / ((double)(RAND_MAX)+(double)(1)) ) ;      
 	}
 }
 
@@ -54,18 +55,17 @@ int main()
 {
 	double adjust;
 	int i, j, pivot;
-	struct timeval start_time,end_time;
+	struct timespec start_time,end_time;
 
-	gettimeofday(&start_time,0);
 	// initialize matrix
 	initMatrix();
 
+	clock_gettime(CLOCK_MONOTONIC,&start_time);
 	// upper triangulation step
-#pragma omp parallel for private(pivot,i,j) shared(A,Y)
+#pragma omp parallel for private(pivot,i,j) shared(A,Y)  schedule(SCHEDULE_TYPE,SCHEDULE_CHUNKSIZE)
 	for (pivot=0; pivot<MATRIX_DIM-1; pivot++) {
 		for (i=pivot+1; i<MATRIX_DIM; i++) {
 			adjust = A[i][pivot] / A[pivot][pivot];
-#pragma omp parallel for private(j) shared(adjust,i,A) schedule(static)
 			for (j=pivot; j<MATRIX_DIM; j++) {
 				A[i][j] = A[i][j] - adjust * A[pivot][j];
 			}
@@ -73,11 +73,14 @@ int main()
 		}
 	}
 
+	clock_gettime(CLOCK_MONOTONIC,&end_time);
+
+
 	// diagonalization step
 	for (pivot=MATRIX_DIM-1; pivot>0; pivot--) {
 		for (i=pivot-1; i>=0; i--) {
 			adjust = A[i][pivot] / A[pivot][pivot];
-			A[i][pivot] = A[i][pivot] - adjust * A[pivot][pivot];
+			A[i][pivot] = A[i][pivot] - adjust * A[pivot][pivot];   
 			Y[i] = Y[i] - adjust * Y[pivot];
 		}
 	}
@@ -87,6 +90,5 @@ int main()
 		X[i] = Y[i] / A[i][i];
 
 	//printSol();
-	gettimeofday(&end_time,0);
-	printf("\nTotal execution time for parallel gauss- %lf ms\n",(end_time.tv_usec - start_time.tv_usec));
+	printf("\nTotal execution time for parallel gauss - %lf s\n",(end_time.tv_sec - start_time.tv_sec) +  (end_time.tv_nsec - start_time.tv_nsec)/1000000000.0);
 }

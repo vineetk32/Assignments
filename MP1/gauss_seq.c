@@ -43,9 +43,9 @@ initMatrix()
 	srand(SEED);
 	for (i=0; i<MATRIX_DIM; i++) {
 		for (j=0; j<MATRIX_DIM; j++) {
-			A[i][j] =  100 * ((double)rand() / ((double)(RAND_MAX)+(double)(1)) ) ;
+			A[i][j] =  100 * ((double)rand() / ((double)(RAND_MAX)+(double)(1)) ) ;      
 		}
-		Y[i] = 100 * ((double)rand() / ((double)(RAND_MAX)+(double)(1)) ) ;
+		Y[i] = 100 * ((double)rand() / ((double)(RAND_MAX)+(double)(1)) ) ;      
 	}
 }
 
@@ -55,11 +55,10 @@ int main()
 	int i, j, pivot;
 	struct timespec start_time,end_time;
 
-	clock_gettime(CLOCK_MONOTONIC,&start_time);
-
 	// initialize matrix
 	initMatrix();
 
+	clock_gettime(CLOCK_MONOTONIC,&start_time);
 	// upper triangulation step
 	for (pivot=0; pivot<MATRIX_DIM-1; pivot++) {
 		for (i=pivot+1; i<MATRIX_DIM; i++) {
@@ -71,20 +70,22 @@ int main()
 		}
 	}
 
+	clock_gettime(CLOCK_MONOTONIC,&end_time);
+
+
 	// diagonalization step
 	for (pivot=MATRIX_DIM-1; pivot>0; pivot--) {
 		for (i=pivot-1; i>=0; i--) {
 			adjust = A[i][pivot] / A[pivot][pivot];
-			A[i][pivot] = A[i][pivot] - adjust * A[pivot][pivot];
+			A[i][pivot] = A[i][pivot] - adjust * A[pivot][pivot];   
 			Y[i] = Y[i] - adjust * Y[pivot];
 		}
 	}
 
 	// solution step
 	for (i=0; i<MATRIX_DIM; i++)
-	X[i] = Y[i] / A[i][i];
+		X[i] = Y[i] / A[i][i];
 
 	//printSol();
-	clock_gettime(CLOCK_MONOTONIC,&end_time);
-	printf("\nTotal execution time for boring old gauss - %lf ms\n",(end_time.tv_nsec - start_time.tv_nsec)/1000000);
+	printf("\nTotal execution time for sequential gauss - %lf s\n",(end_time.tv_sec - start_time.tv_sec) +  (end_time.tv_nsec - start_time.tv_nsec)/1000000000.0);
 }
