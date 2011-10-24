@@ -30,6 +30,11 @@ public class TwitterPopularity {
 
 		// Map function
 		public void map(LongWritable fileOffset, Text fileLine, Context context) throws IOException, InterruptedException {
+		
+			Text author = new Text();
+			Text txttopic = new Text();
+			IntWritable num = new IntWritable(1);
+
 			
 			// Split line into chunks
 			String[] tweetChunks = fileLine.toString().split(",\"");
@@ -54,18 +59,26 @@ public class TwitterPopularity {
 				return;
 			
 			/* PA3: Add code here to emit intermediate result for per-author processing */
+			author.set("@" + origAuthor);
+			num.set(tweetContent.length());
+			context.write(author,num);
 			
 			// Search the tweet content for #topics and save them, avoiding duplicates
 			ArrayList<String> topicList = new ArrayList<String>(0);
 			String[] contentChunks = tweetContent.split(" ");
 			for(String contentChunk : contentChunks){
 				if(contentChunk.length() > 0 && (contentChunk.charAt(0) == '#') && (!topicList.contains(removePunct(contentChunk)))){
-					topicList.add(removePunct(contentChunk));
+					topicList.add("#" + removePunct(contentChunk));
 				}
 			}
 			
 			/* PA3: Add code here to emit intermediate result for per-topic processing */
-			
+			num.set(1);
+			for ( String topic : topicList)
+			{
+				txttopic.set(topic);
+				context.write(txttopic,num);
+			}
 		}
 		
 		// Punctuation remover
@@ -82,12 +95,26 @@ public class TwitterPopularity {
 	public static class StatConsolidator extends Reducer<Text,IntWritable,Text,Text> {
 	
 		// Reduce function
+
 		public void reduce(Text subject, Iterable<IntWritable> occurrenceLengths, Context context) throws IOException, InterruptedException {
 			
 			/* PA3: Add code here to carry out per-user and per-topic reduction 
-				  and emit final output */	
-			
-		
+				  and emit final output */
+
+			int sum = 0;
+			int numTweets = 0;
+			for (IntWritable val : occurrenceLengths) {
+				sum += val.get();
+				numTweets++;
+			}
+			//We want avg length per tweet for a user. Re-using the vriable sum
+    		Text result = new Text();
+			if (subject.charAt(0) == '@')
+			{
+				sum = sum / numTweets;
+			}
+			result.set(Integer.toString(sum));
+			context.write(subject,result);
 		}
 		
 	}
