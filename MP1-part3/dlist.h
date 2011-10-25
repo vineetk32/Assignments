@@ -6,30 +6,32 @@
 #include<assert.h>
 #include<omp.h>
 
- 
+
 #define NUM_ELEMENT 500
 #define SEED 0
 
 /* IntListNode structure defines a node in the linked list */
 typedef struct tagIntListNode{
-  int data;
-  struct tagIntListNode *next;
-  struct tagIntListNode *prev;
+	int data;
+	struct tagIntListNode *next;
+	struct tagIntListNode *prev;
+	omp_lock_t lock;
+	int deleted;
 } IntListNode;
 typedef IntListNode *pIntListNode;
 
 
 /* IntList is a list of integer values, ascendingly sorted, with the 
-   smallest integer value at the head of the list */
+smallest integer value at the head of the list */
 typedef struct {
-  pIntListNode  head;
+	pIntListNode  head;
 } IntList;
 typedef IntList* pIntList;
 
 typedef struct {
-  pIntListNode nodes[NUM_ELEMENT];
-  int curPtr;
-  int numElmt;
+	pIntListNode nodes[NUM_ELEMENT];
+	int curPtr;
+	int numElmt;
 } ArrNode;
 typedef ArrNode *pArrNode;
 

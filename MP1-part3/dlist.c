@@ -118,11 +118,11 @@ void IntList_Print(pIntList list)
 		printf("list's first element is %d: %d\n", i, p->data);
 	}
 
-	while (p != NULL) {
-		printf("list element %d: %d\n", i, p->data);
-		p = p->next;
-		i++;
-	}
+	//while (p != NULL) {
+	//	printf("list element %d: %d\n", i, p->data);
+	//	p = p->next;
+	//	i++;
+	//}
 }
 
 
