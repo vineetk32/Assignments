@@ -1,0 +1,83 @@
+===== 506 SMP Simulator Configuration =====
+L1_SIZE:			8192
+L1_ASSOC:			8
+L1_BLOCKSIZE:			64
+NUMBER OF PROCESSORS:		4
+COHERENCE PROTOCOL:		MOESI
+TRACE FILE:			./Validation_runs/canneal.04t.longTrace
+===== Simulation results (Cache_0)      =====
+01. number of reads:				112661
+02. number of read misses:			9154
+03. number of writes:				11942
+04. number of write misses:			39
+05. number of write backs:			899
+06. number of invalid to exclusive (INV->EXC):	2397
+07. number of invalid to shared (INV->SHD):	6757
+08. number of modified to shared (MOD->SHD):	0
+09. number of exclusive to shared (EXC->SHD):	1903
+10. number of shared to modified (SHD->MOD):	658
+11. number of invalid to modified (INV->MOD):	39
+12. number of exclusive to modified (EXC->MOD):	267
+13. number of owned to modified (OWN->MOD):	13
+14. number of modified to owned (MOD->OWN):	18
+15. number of cache to cache transfers:		5453
+16. number of interventions:			18
+17. number of invalidations:			2004
+18. number of flushes:				95
+===== Simulation results (Cache_1)      =====
+01. number of reads:				110830
+02. number of read misses:			8961
+03. number of writes:				11710
+04. number of write misses:			41
+05. number of write backs:			864
+06. number of invalid to exclusive (INV->EXC):	2300
+07. number of invalid to shared (INV->SHD):	6661
+08. number of modified to shared (MOD->SHD):	0
+09. number of exclusive to shared (EXC->SHD):	1846
+10. number of shared to modified (SHD->MOD):	635
+11. number of invalid to modified (INV->MOD):	41
+12. number of exclusive to modified (EXC->MOD):	254
+13. number of owned to modified (OWN->MOD):	14
+14. number of modified to owned (MOD->OWN):	17
+15. number of cache to cache transfers:		1975
+16. number of interventions:			17
+17. number of invalidations:			2025
+18. number of flushes:				94
+===== Simulation results (Cache_2)      =====
+01. number of reads:				114938
+02. number of read misses:			8961
+03. number of writes:				12383
+04. number of write misses:			42
+05. number of write backs:			880
+06. number of invalid to exclusive (INV->EXC):	2268
+07. number of invalid to shared (INV->SHD):	6693
+08. number of modified to shared (MOD->SHD):	0
+09. number of exclusive to shared (EXC->SHD):	1853
+10. number of shared to modified (SHD->MOD):	655
+11. number of invalid to modified (INV->MOD):	42
+12. number of exclusive to modified (EXC->MOD):	244
+13. number of owned to modified (OWN->MOD):	19
+14. number of modified to owned (MOD->OWN):	26
+15. number of cache to cache transfers:		227
+16. number of interventions:			26
+17. number of invalidations:			1997
+18. number of flushes:				105
+===== Simulation results (Cache_3)      =====
+01. number of reads:				113428
+02. number of read misses:			9057
+03. number of writes:				12108
+04. number of write misses:			39
+05. number of write backs:			869
+06. number of invalid to exclusive (INV->EXC):	2322
+07. number of invalid to shared (INV->SHD):	6735
+08. number of modified to shared (MOD->SHD):	0
+09. number of exclusive to shared (EXC->SHD):	1876
+10. number of shared to modified (SHD->MOD):	641
+11. number of invalid to modified (INV->MOD):	39
+12. number of exclusive to modified (EXC->MOD):	252
+13. number of owned to modified (OWN->MOD):	21
+14. number of modified to owned (MOD->OWN):	41
+15. number of cache to cache transfers:		225
+16. number of interventions:			41
+17. number of invalidations:			2007
+18. number of flushes:				108
