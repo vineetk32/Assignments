@@ -1,8 +1,8 @@
 CC = g++
-OPT = -O3
+#OPT = -O3
 OPT = -g
 WARN = -Wall
-ERR = -Werror
+#ERR = -Werror
 
 CFLAGS = $(OPT) $(WARN) $(ERR) $(INC) $(LIB)
 
