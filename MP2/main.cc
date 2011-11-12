@@ -11,7 +11,8 @@
 #include <fstream>
 using namespace std;
 
-#include "cache.h"
+#include "Cache.h"
+#include "MemoryController.h"
 
 int main(int argc, char *argv[])
 {
@@ -21,7 +22,8 @@ int main(int argc, char *argv[])
 	char tempBuff[128] = {'\0'};
 	int cacheNum;
 	char cacheOperation;
-	
+	int i;
+	vector<Cache> cacheVector;
 
 	if(argv[1] == NULL){
 		 printf("input format: ");
@@ -39,10 +41,13 @@ int main(int argc, char *argv[])
 	char *fname =  (char *)malloc(20);
 	fname = argv[6];
 
-	vector<Cache> cacheVector;
-	int i;
-
 	
+	for(int i = 0; i < num_processors;i++)
+	{
+		Cache cacheObj(cache_size,cache_assoc,blk_size);
+		cacheVector.push_back(cacheObj);
+	}
+
 	//****************************************************//
 	//**printf("===== Simulator configuration =====\n");**//
 	//*******print out simulator configuration here*******//
@@ -60,12 +65,6 @@ int main(int argc, char *argv[])
 	//*****create an array of caches here**********//
 	//*********************************************//
 
-
-	for(i = 0; i < num_processors;i++)
-	{
-		Cache cacheObj(cache_size,cache_assoc,blk_size);
-		cacheVector.push_back(cacheObj);
-	}
 
 	pFile = fopen (fname,"r");
 	if(pFile == 0)

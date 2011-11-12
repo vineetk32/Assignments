@@ -5,22 +5,22 @@ Ahmad Samih & Yan Solihin
 {aasamih,solihin}@ece.ncsu.edu
 ********************************************************/
 
-#include "cache.h"
+#include "Cache.h"
 
 
-Cache::Cache(int s,int a,int b )
+Cache::Cache(int s,int a,int b)
 {
 	ulong i, j;
 	reads = readMisses = writes = 0; 
 	writeMisses = writeBacks = currentCycle = 0;
 
-	size       = (ulong)(s);
-	lineSize   = (ulong)(b);
-	assoc      = (ulong)(a);
-	sets       = (ulong)((s/b)/a);
-	numLines   = (ulong)(s/b);
-	log2Sets   = (ulong)(log2(int(sets)));
-	log2Blk    = (ulong)(log2(int(b)));
+	size            = (ulong)(s);
+	lineSize        = (ulong)(b);
+	assoc           = (ulong)(a);
+	sets            = (ulong)((s/b)/a);
+	numLines        = (ulong)(s/b);
+	log2Sets        = (ulong)(log2(int(sets)));
+	log2Blk         = (ulong)(log2(int(b)));
 	
 	//*******************//
 	//initialize your counters here//
@@ -46,6 +46,17 @@ Cache::Cache(int s,int a,int b )
 		}
 		cache.push_back(tempCache);
 	}
+
+	//Make the stateChangeMatrix 0;
+	//Enum as a max_number :-O
+	for(i = 0;i <= INVALID; i++)
+	{
+		for (j = 0; j <= INVALID; j++)
+		{
+			stateChangeMatrix[i][j] = 0;
+		}
+	}
+	processorID++;
 }
 
 /**you might add other parameters to Access()
@@ -59,21 +70,49 @@ void Cache::Access(ulong addr,uchar op)
 	if(op == 'w') writes++;
 	else          reads++;
 
-	cacheLine * line = findLine(addr);
+	cacheLine *line = findLine(addr);
+	controller->getBlockState(addr);
 	if(line == NULL)/*miss*/
 	{
 		if(op == 'w') writeMisses++;
 		else readMisses++;
 
 		cacheLine *newline = fillLine(addr);
-		if(op == 'w') newline->setFlags(DIRTY);
+		if(op == 'w')
+		{
+			if (currentProtocol == MSI)
+			{
+				//newline->setState(MODIFIED);
+				setState(addr,MODIFIED);
+				controller->broadcastStateChange(addr,MODIFIED);
+				//recordStateChange(INVALID,MODIFIED);
+			}
+			else 
+			{
+				if (controller->copiesExist(addr,processorID) == true)
+				{
+					//newline->setSeq(MODIFIED);
+					setState(addr,MODIFIED);
+					controller->broadcastStateChange(addr,MODIFIED);
+					//recordStateChange(INVALID,MODIFIED);
+				}
+				else
+				{
+					//newline->setState(EXCLUSIVE);
+					setState(addr,EXCLUSIVE);
+					controller->broadcastStateChange(addr,EXCLUSIVE);
+					//recordStateChange(INV
+				}
+			}
+			
+		}
 
 	}
 	else
 	{
 		/**since it's a hit, update LRU and update dirty flag**/
 		updateLRU(line);
-		if(op == 'w') line->setFlags(DIRTY);
+		if(op == 'w') line->setState(DIRTY);
 	}
 }
 
@@ -87,15 +126,19 @@ cacheLine * Cache::findLine(ulong addr)
 	i   = calcIndex(addr);
 
 	for(j=0; j<assoc; j++)
+	{
 		if(cache[i][j].isValid())
+		{
 			if(cache[i][j].getTag() == tag)
 			{
-				pos = j; break; 
+				pos = j; break;
 			}
 			if(pos == assoc)
 				return NULL;
 			else
-				return &(cache[i][pos]); 
+				return &(cache[i][pos]);
+		}
+	}
 }
 
 /*upgrade LRU line to be MRU line*/
@@ -139,14 +182,57 @@ cacheLine *Cache::findLineToReplace(ulong addr)
 cacheLine *Cache::fillLine(ulong addr)
 { 
 	ulong tag;
+	cacheState newState;
 
 	cacheLine *victim = findLineToReplace(addr);
 	assert(victim != 0);
-	if(victim->getFlags() == DIRTY) writeBack(addr);
+
+	if(currentProtocol == MOESI)
+	{
+		if (victim->getState() == OWNER)
+		{
+			//TODO:Check
+			writeBack(addr);
+			recordStateChange(OWNER,INVALID);
+		}
+	}
+	else if (victim->getState() == MODIFIED)
+	{
+		//TODO:Check
+		writeBack(addr);
+		recordStateChange(MODIFIED,INVALID);
+	}
 
 	tag = calcTag(addr);
 	victim->setTag(tag);
-	victim->setFlags(VALID);
+	if (controller->copiesExist(addr,processorID) == false)
+	{
+		if (currentProtocol == MSI)
+		{
+			newState = SHARED;
+			recordStateChange(INVALID,SHARED);
+		}
+		else
+		{
+			newState = EXCLUSIVE;
+			recordStateChange(INVALID,EXCLUSIVE);
+		}
+	}
+	else
+	{
+		switch(controller->getBlockState(addr))
+		{
+		case MODIFIED:
+		case OWNER:
+		case EXCLUSIVE:
+		case SHARED:
+		case INVALID:
+		default:
+			cout<<"\nWhat?\n";
+			exit(0);
+		}
+	}
+	victim->setState(newState);
 	/**note that this cache line has been already 
 	upgraded to MRU in the previous function (findLineToReplace)**/
 
@@ -160,17 +246,118 @@ void Cache::printStats()
 	printf("\n03. number of writes:				%ld",writes);
 	printf("\n04. number of write misses:			%ld",writeMisses);
 	printf("\n05. number of write backs:			%ld",writeBacks);
-	/*printf("\n06. number of invalid to exclusive (INV->EXC):	57
-	printf("\n07. number of invalid to shared (INV->SHD):	36
-	printf("\n08. number of modified to shared (MOD->SHD):	0
-	printf("\n09. number of exclusive to shared (EXC->SHD):	20
-	printf("\n10. number of shared to modified (SHD->MOD):	15
-	printf("\n11. number of invalid to modified (INV->MOD):	13
-	printf("\n12. number of exclusive to modified (EXC->MOD):	3
-	printf("\n13. number of owned to modified (OWN->MOD):	0
-	printf("\n14. number of modified to owned (MOD->OWN):	0
-	printf("\n15. number of cache to cache transfers:		44
+	printf("\n06. number of invalid to exclusive (INV->EXC):	%d",stateChangeMatrix[INVALID][SHARED]);
+	printf("\n07. number of invalid to shared (INV->SHD):	%d",stateChangeMatrix[INVALID][SHARED]);
+	printf("\n08. number of modified to shared (MOD->SHD):	%d",stateChangeMatrix[MODIFIED][SHARED]);
+	printf("\n09. number of exclusive to shared (EXC->SHD):	%d",stateChangeMatrix[EXCLUSIVE][SHARED]);
+	printf("\n10. number of shared to modified (SHD->MOD):	%d",stateChangeMatrix[SHARED][MODIFIED]);
+	printf("\n11. number of invalid to modified (INV->MOD):	%d",stateChangeMatrix[INVALID][MODIFIED]);
+	printf("\n12. number of exclusive to modified (EXC->MOD):	%d",stateChangeMatrix[EXCLUSIVE][MODIFIED]);
+	printf("\n13. number of owned to modified (OWN->MOD):	%d",stateChangeMatrix[OWNER][MODIFIED]);
+	printf("\n14. number of modified to owned (MOD->OWN):	%d",stateChangeMatrix[MODIFIED][OWNER]);
+	/*printf("\n15. number of cache to cache transfers:		%d",stateChangeMatrix[INVALID][SHARED]);
 	printf("\n16. number of interventions:			0
 	printf("\n17. number of invalidations:			21
 	printf("\n18. number of flushes:				17*/
+}
+
+void Cache::setController(IMemoryController &memController)
+{
+	controller = &memController;
+}
+
+int Cache::setState(ulong addr,cacheState newState,bool isFlushNeeded)
+{
+	cacheLine *temp;
+	temp = findLine(addr);
+	if (temp == NULL)
+	{
+		return -1;
+	}
+	else
+	{
+		temp->setState(newState);
+		return 0;
+	}
+	recordStateChange(temp->getState(),newState);
+	//TODO: add interventions,invalidations,flushes
+}
+
+bool Cache::hasLine(ulong addr)
+{
+	if (findLine(addr) == NULL) return false;
+	else return true;
+}
+
+cacheState Cache::getState(ulong addr)
+{
+	cacheLine *temp;
+	temp = findLine(addr);
+	if (temp == NULL)
+	{
+		return UNCACHED;
+	}
+	else
+	{
+		return temp->getState();
+	}
+}
+
+void Cache::recordStateChange(cacheState oldState,cacheState newState)
+{
+	stateChangeMatrix[oldState][newState]++;
+}
+
+void Cache::snoopBusTransaction(ulong addr,busTransaction transaction)
+{
+	//TODO: increment the flush counter everytime.
+	cacheState tempState = getState(addr);
+	if (tempState != UNCACHED)
+	{
+		if (currentProtocol == MSI)
+		{
+			if (transaction == BUSRD)
+			{
+				if (tempState == MODIFIED)
+				{
+					setState(addr,SHARED);
+				}
+			}
+			else if (transaction == BUSRDX)
+			{
+				if (tempState == SHARED)
+				{
+					setState(addr,INVALID);
+				}
+			}
+		}
+		else if (currentProtocol == MESI)
+		{
+			if (transaction == BUSRD)
+			{
+				if (tempState == MODIFIED || tempState == EXCLUSIVE)
+				{
+					setState(addr,SHARED);
+				}
+			}
+			else if (transaction == BUSRDX)
+			{
+				if (tempState == SHARED || tempState == EXCLUSIVE || tempState == MODIFIED)
+				{
+					setState(addr,INVALID);
+				}
+			}
+			else if (transaction == BUSUPGR)
+			{
+				if (tempState == SHARED)
+				{
+					setState(addr,INVALID);
+				}
+			}
+		}
+		else if (currentProtocol == MOESI)
+		{
+			//TODO
+		}
+	}
 }
