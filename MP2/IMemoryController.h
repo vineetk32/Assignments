@@ -6,9 +6,9 @@
 class IMemoryController
 {
 public:
-	virtual cacheState getBlockState(unsigned long addr) = 0;
-	virtual void setBlockState(unsigned long addr,cacheState newState);
-	virtual void addBlock(unsigned long addr);
+	virtual cacheState getBlockState(ulong addr) = 0;
+	virtual void setBlockState(ulong addr,cacheState newState);
+	virtual void addBlock(ulong addr);
 	virtual bool copiesExist(ulong addr,int processorID) ;
 
 	virtual void broadcastStateChange(ulong addr,cacheState newState);

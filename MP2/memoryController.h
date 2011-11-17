@@ -14,10 +14,10 @@ protected:
 	int numProcessors;
 	map<unsigned long,MemoryBlock> mainMemory;
 	coherenceProtocol currentProtocol;
-	vector<ICache> *cacheArray;
+	vector<ICache*> cacheArray;
 
 public:
-	void setCacheArray(vector<ICache> &newArray);
+	void setCacheArray(vector<ICache *> &newArray);
 
 	MemoryController(int num_processors,coherenceProtocol protocol);
 	cacheState getBlockState(ulong addr);

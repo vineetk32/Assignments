@@ -7,12 +7,14 @@ Ahmad Samih & Yan Solihin
 
 #include "Cache.h"
 
+int Cache::processorID = 0;
 
 Cache::Cache(int s,int a,int b)
 {
 	ulong i, j;
 	reads = readMisses = writes = 0; 
 	writeMisses = writeBacks = currentCycle = 0;
+	invalidations = interventions = flushes = 0;
 
 	size            = (ulong)(s);
 	lineSize        = (ulong)(b);
@@ -78,41 +80,67 @@ void Cache::Access(ulong addr,uchar op)
 		else readMisses++;
 
 		cacheLine *newline = fillLine(addr);
+
 		if(op == 'w')
 		{
+			controller->requestBusTransaction(addr,BUSRDX,processorID);
 			if (currentProtocol == MSI)
 			{
 				//newline->setState(MODIFIED);
 				setState(addr,MODIFIED);
-				controller->broadcastStateChange(addr,MODIFIED);
-				//recordStateChange(INVALID,MODIFIED);
+				
 			}
 			else 
 			{
 				if (controller->copiesExist(addr,processorID) == true)
 				{
 					//newline->setSeq(MODIFIED);
+					//TODO:update cache to cache transfer counter.
 					setState(addr,MODIFIED);
-					controller->broadcastStateChange(addr,MODIFIED);
-					//recordStateChange(INVALID,MODIFIED);
 				}
 				else
 				{
 					//newline->setState(EXCLUSIVE);
 					setState(addr,EXCLUSIVE);
-					controller->broadcastStateChange(addr,EXCLUSIVE);
-					//recordStateChange(INV
 				}
 			}
-			
 		}
-
 	}
 	else
 	{
-		/**since it's a hit, update LRU and update dirty flag**/
 		updateLRU(line);
-		if(op == 'w') line->setState(DIRTY);
+		//if(op == 'w') line->setState(DIRTY);
+		if(op == 'w')
+		{
+			cacheState currState = getState(addr);
+			if (currentProtocol == MSI)
+			{
+				if (currState == SHARED || currState == INVALID)
+				{
+					controller->requestBusTransaction(addr,BUSRDX,processorID);
+					setState(addr,MODIFIED);
+				}
+				
+			}
+			else if (currentProtocol == MESI)
+			{
+				if (currState == INVALID)
+				{
+					controller->requestBusTransaction(addr,BUSRDX,processorID);
+					setState(addr,MODIFIED);
+				}
+				else if (currState == SHARED)
+				{
+					controller->requestBusTransaction(addr,BUSUPGR,processorID);
+					setState(addr,MODIFIED);
+				}
+				setState(addr,MODIFIED);
+			}
+			else if (currentProtocol == MOESI)
+			{
+				//TODO
+			}
+		}
 	}
 }
 
@@ -246,19 +274,19 @@ void Cache::printStats()
 	printf("\n03. number of writes:				%ld",writes);
 	printf("\n04. number of write misses:			%ld",writeMisses);
 	printf("\n05. number of write backs:			%ld",writeBacks);
-	printf("\n06. number of invalid to exclusive (INV->EXC):	%d",stateChangeMatrix[INVALID][SHARED]);
-	printf("\n07. number of invalid to shared (INV->SHD):	%d",stateChangeMatrix[INVALID][SHARED]);
-	printf("\n08. number of modified to shared (MOD->SHD):	%d",stateChangeMatrix[MODIFIED][SHARED]);
-	printf("\n09. number of exclusive to shared (EXC->SHD):	%d",stateChangeMatrix[EXCLUSIVE][SHARED]);
-	printf("\n10. number of shared to modified (SHD->MOD):	%d",stateChangeMatrix[SHARED][MODIFIED]);
-	printf("\n11. number of invalid to modified (INV->MOD):	%d",stateChangeMatrix[INVALID][MODIFIED]);
-	printf("\n12. number of exclusive to modified (EXC->MOD):	%d",stateChangeMatrix[EXCLUSIVE][MODIFIED]);
-	printf("\n13. number of owned to modified (OWN->MOD):	%d",stateChangeMatrix[OWNER][MODIFIED]);
-	printf("\n14. number of modified to owned (MOD->OWN):	%d",stateChangeMatrix[MODIFIED][OWNER]);
-	/*printf("\n15. number of cache to cache transfers:		%d",stateChangeMatrix[INVALID][SHARED]);
-	printf("\n16. number of interventions:			0
-	printf("\n17. number of invalidations:			21
-	printf("\n18. number of flushes:				17*/
+	printf("\n06. number of invalid to exclusive (INV->EXC):	%ld",stateChangeMatrix[INVALID][SHARED]);
+	printf("\n07. number of invalid to shared (INV->SHD):	%ld",stateChangeMatrix[INVALID][SHARED]);
+	printf("\n08. number of modified to shared (MOD->SHD):	%ld",stateChangeMatrix[MODIFIED][SHARED]);
+	printf("\n09. number of exclusive to shared (EXC->SHD):	%ld",stateChangeMatrix[EXCLUSIVE][SHARED]);
+	printf("\n10. number of shared to modified (SHD->MOD):	%ld",stateChangeMatrix[SHARED][MODIFIED]);
+	printf("\n11. number of invalid to modified (INV->MOD):	%ld",stateChangeMatrix[INVALID][MODIFIED]);
+	printf("\n12. number of exclusive to modified (EXC->MOD):	%ld",stateChangeMatrix[EXCLUSIVE][MODIFIED]);
+	printf("\n13. number of owned to modified (OWN->MOD):	%ld",stateChangeMatrix[OWNER][MODIFIED]);
+	printf("\n14. number of modified to owned (MOD->OWN):	%ld",stateChangeMatrix[MODIFIED][OWNER]);
+	//printf("\n15. number of cache to cache transfers:		%ld",stateChangeMatrix[INVALID][SHARED]);
+	printf("\n16. number of interventions:			%ld",interventions);
+	printf("\n17. number of invalidations:			%ld",invalidations);
+	printf("\n18. number of flushes:				%ld",flushes);
 }
 
 void Cache::setController(IMemoryController &memController)
@@ -268,19 +296,23 @@ void Cache::setController(IMemoryController &memController)
 
 int Cache::setState(ulong addr,cacheState newState,bool isFlushNeeded)
 {
-	cacheLine *temp;
-	temp = findLine(addr);
-	if (temp == NULL)
+	cacheState oldState = getState(addr);
+	if (oldState == UNCACHED)
 	{
 		return -1;
 	}
 	else
 	{
-		temp->setState(newState);
+		setState(addr,newState);
 		return 0;
 	}
-	recordStateChange(temp->getState(),newState);
-	//TODO: add interventions,invalidations,flushes
+	recordStateChange(oldState,newState);
+	if (newState == INVALID)
+		invalidations++;
+	else if (newState == SHARED && oldState != UNCACHED)
+		interventions++;
+	if (isFlushNeeded == true)
+		flushes++;
 }
 
 bool Cache::hasLine(ulong addr)
@@ -310,7 +342,7 @@ void Cache::recordStateChange(cacheState oldState,cacheState newState)
 
 void Cache::snoopBusTransaction(ulong addr,busTransaction transaction)
 {
-	//TODO: increment the flush counter everytime.
+	//TODO: check flushOpts
 	cacheState tempState = getState(addr);
 	if (tempState != UNCACHED)
 	{
@@ -320,14 +352,14 @@ void Cache::snoopBusTransaction(ulong addr,busTransaction transaction)
 			{
 				if (tempState == MODIFIED)
 				{
-					setState(addr,SHARED);
+					setState(addr,SHARED,true);
 				}
 			}
 			else if (transaction == BUSRDX)
 			{
 				if (tempState == SHARED)
 				{
-					setState(addr,INVALID);
+					setState(addr,INVALID,true);
 				}
 			}
 		}
@@ -337,14 +369,14 @@ void Cache::snoopBusTransaction(ulong addr,busTransaction transaction)
 			{
 				if (tempState == MODIFIED || tempState == EXCLUSIVE)
 				{
-					setState(addr,SHARED);
+					setState(addr,SHARED,true);
 				}
 			}
 			else if (transaction == BUSRDX)
 			{
 				if (tempState == SHARED || tempState == EXCLUSIVE || tempState == MODIFIED)
 				{
-					setState(addr,INVALID);
+					setState(addr,INVALID,true);
 				}
 			}
 			else if (transaction == BUSUPGR)

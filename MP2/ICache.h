@@ -12,7 +12,7 @@ class ICache
 {
 public:
 	virtual void Access(ulong address,uchar operation);
-	virtual int setState(ulong addr,cacheState newState,bool isFlushNeeded);
+	virtual int setState(ulong addr,cacheState newState,bool isFlushNeeded = false);
 
 	virtual cacheState  getState(ulong addr);
 	virtual bool        hasLine(ulong addr);

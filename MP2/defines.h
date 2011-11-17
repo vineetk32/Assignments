@@ -1,6 +1,8 @@
 #ifndef DEFINES_H
 #define DEFINES_H
 
+#include <cmath>
+
 inline long log2(int x) { return long(  log(double(x)) / log (double(2))); }
 
 typedef unsigned long ulong;

@@ -22,27 +22,27 @@ void MemoryController::addBlock(unsigned long addr)
 	mainMemory[addr] = tempBlock;
 }
 
-void MemoryController::setCacheArray(vector<ICache> &newArray)
+void MemoryController::setCacheArray(vector<ICache *> &newArray)
 {
-	cacheArray = &newArray;
+	cacheArray = newArray;
 }
 
 
 void MemoryController::broadcastStateChange(ulong addr,cacheState newState)
 {
-	vector<ICache>::iterator it;
-	for(it=cacheArray->begin(); it < cacheArray->end(); it++)
+	vector<ICache *>::iterator it;
+	for(it=cacheArray.begin(); it < cacheArray.end(); it++)
 	{
-		it->changeState(addr,newState);
+		(*it)->setState(addr,newState);
 	}
 }
 
 bool MemoryController::copiesExist(ulong addr,int processorID)
 {
-	for (int i = 0; i < cacheArray->size(); i++)
+	for (int i = 0; i < cacheArray.size(); i++)
 	{
 		if ( i == processorID) continue;
-		if (cacheArray->at(i).hasLine(addr) == true)
+		if (cacheArray.at(i)->hasLine(addr) == true)
 		{
 			return true;
 		}
@@ -52,12 +52,12 @@ bool MemoryController::copiesExist(ulong addr,int processorID)
 
 void MemoryController::requestBusTransaction(ulong addr,busTransaction transaction,int processorID)
 {
-	for (int i = 0; i < cacheArray->size(); i++)
+	for (int i = 0; i < cacheArray.size(); i++)
 	{
 		if ( i == processorID) continue;
-		if (cacheArray->at(i).hasLine(addr) == true)
+		if ( cacheArray.at(i)->hasLine(addr) == true)
 		{
-			cacheArray->at(i).snoopBusTransaction(addr,transaction);
+			cacheArray.at(i)->snoopBusTransaction(addr,transaction);
 		}
 	}
 }

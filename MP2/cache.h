@@ -29,16 +29,16 @@ protected:
 	ulong size, lineSize, assoc, sets, log2Sets, log2Blk, tagMask, numLines;
 	ulong reads,readMisses,writes,writeMisses,writeBacks;
 
-	short stateChangeMatrix[INVALID][INVALID];
-
 	IMemoryController *controller;
 	coherenceProtocol currentProtocol;
 
 	//******///
 	//add coherence counters here///
 	//******
+	ulong stateChangeMatrix[INVALID][INVALID];
+	ulong interventions,flushes,invalidations;
 
-	vector<vector<cacheLine>> cache;
+	vector<vector<cacheLine> > cache;
 	ulong calcTag(ulong addr)     { return (addr >> (log2Blk) );}
 	ulong calcIndex(ulong addr)  { return ((addr >> log2Blk) & tagMask);}
 	ulong calcAddr4Tag(ulong tag)   { return (tag << (log2Blk));}
@@ -49,13 +49,13 @@ public:
 	Cache(int cache_size,int cache_assoc,int blk_size);
 	//~Cache() { delete cache;}
 
-	cacheLine   *findLineToReplace(ulong addr);
-	cacheLine   *fillLine(ulong addr);
-	cacheLine   *findLine(ulong addr);
-	cacheLine   *getLRU(ulong);
-	int         setState(ulong addr,cacheState newState,bool isFlushNeeded = false);
-	cacheState  getState(ulong addr);
-	bool        hasLine(ulong addr);
+	cacheLine          *findLineToReplace(ulong addr);
+	cacheLine          *fillLine(ulong addr);
+	cacheLine          *findLine(ulong addr);
+	cacheLine          *getLRU(ulong);
+	virtual int         setState(ulong addr,cacheState newState,bool isFlushNeeded = false);
+	virtual cacheState  getState(ulong addr);
+	virtual bool        hasLine(ulong addr);
 
 	ulong getRM(){return readMisses;}
 	ulong getWM(){return writeMisses;} 
@@ -65,12 +65,12 @@ public:
 	void  setProtocol(coherenceProtocol protocol){currentProtocol = protocol;}
 
 	void writeBack(ulong)   {writeBacks++;}
-	void Access(ulong address,uchar operation);
+	virtual void Access(ulong address,uchar operation);
 	void printStats();
 	void updateLRU(cacheLine *);
 	void setController(IMemoryController &memController);
-	void recordStateChange(cacheState oldState,cacheState newState);
-	void snoopBusTransaction(ulong addr,busTransaction transaction);
+	virtual void recordStateChange(cacheState oldState,cacheState newState);
+	virtual void snoopBusTransaction(ulong addr,busTransaction transaction);
 
 	//******///
 	//add other functions to handle bus transactions///
