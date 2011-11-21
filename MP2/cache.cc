@@ -7,14 +7,11 @@ Ahmad Samih & Yan Solihin
 
 #include "Cache.h"
 
-int Cache::processorID = 0;
-
 Cache::Cache(int s,int a,int b)
 {
-	ulong i, j;
 	reads = readMisses = writes = 0; 
 	writeMisses = writeBacks = currentCycle = 0;
-	invalidations = interventions = flushes = 0;
+
 
 	size            = (ulong)(s);
 	lineSize        = (ulong)(b);
@@ -24,41 +21,7 @@ Cache::Cache(int s,int a,int b)
 	log2Sets        = (ulong)(log2(int(sets)));
 	log2Blk         = (ulong)(log2(int(b)));
 	
-	//*******************//
-	//initialize your counters here//
-	//*******************//
-
-	tagMask =0;
-	for(i=0;i<log2Sets;i++)
-	{
-		tagMask <<= 1;
-		tagMask |= 1;
-	}
-
-	/**create a two dimentional cache, sized as cache[sets][assoc]**/ 
-	//cache = new cacheLine*[sets];
-	for(i=0; i<sets; i++)
-	{
-		vector<cacheLine> tempCache;
-		for(j=0; j<assoc; j++) 
-		{
-			cacheLine tempBlock;
-			tempBlock.invalidate();
-			tempCache.push_back(tempBlock);
-		}
-		cache.push_back(tempCache);
-	}
-
-	//Make the stateChangeMatrix 0;
-	//Enum as a max_number :-O
-	for(i = 0;i <= INVALID; i++)
-	{
-		for (j = 0; j <= INVALID; j++)
-		{
-			stateChangeMatrix[i][j] = 0;
-		}
-	}
-	processorID++;
+	invalidations = interventions = flushes = transfers = 0;
 }
 
 /**you might add other parameters to Access()
@@ -73,49 +36,49 @@ void Cache::Access(ulong addr,uchar op)
 	else          reads++;
 
 	cacheLine *line = findLine(addr);
-	controller->getBlockState(addr);
 	if(line == NULL)/*miss*/
 	{
-		if(op == 'w') writeMisses++;
-		else readMisses++;
-
-		cacheLine *newline = fillLine(addr);
-
-		if(op == 'w')
+		if (op == 'w') 
 		{
-			controller->requestBusTransaction(addr,BUSRDX,processorID);
-			if (currentProtocol == MSI)
+			writeMisses++;
+			//printf("\n Write Miss: %x",addr);
+			if (currentProtocol != MSI)
 			{
-				//newline->setState(MODIFIED);
-				setState(addr,MODIFIED);
-				
+				transfers += controller->requestBusTransaction(addr,BUSRDX,processorID);
 			}
-			else 
+			else
 			{
-				if (controller->copiesExist(addr,processorID) == true)
-				{
-					//newline->setSeq(MODIFIED);
-					//TODO:update cache to cache transfer counter.
-					setState(addr,MODIFIED);
-				}
-				else
-				{
-					//newline->setState(EXCLUSIVE);
-					setState(addr,EXCLUSIVE);
-				}
+				controller->requestBusTransaction(addr,BUSRDX,processorID);
 			}
+			fillLine(addr,PRWR);
 		}
+		else if (op == 'r')
+		{
+			readMisses++;
+			//printf("\n Read Miss: %ld",addr);
+			if (currentProtocol != MSI)
+			{
+				transfers += controller->requestBusTransaction(addr,BUSRD,processorID);
+			}
+			else
+			{
+				controller->requestBusTransaction(addr,BUSRD,processorID);
+			}
+			fillLine(addr,PRRD);
+		}
+		
+		//TODO:update cache to cache transfer counter.
+
 	}
 	else
 	{
 		updateLRU(line);
-		//if(op == 'w') line->setState(DIRTY);
+		cacheState currState = getState(addr);
 		if(op == 'w')
 		{
-			cacheState currState = getState(addr);
 			if (currentProtocol == MSI)
 			{
-				if (currState == SHARED || currState == INVALID)
+				if (currState == SHARED)
 				{
 					controller->requestBusTransaction(addr,BUSRDX,processorID);
 					setState(addr,MODIFIED);
@@ -124,21 +87,19 @@ void Cache::Access(ulong addr,uchar op)
 			}
 			else if (currentProtocol == MESI)
 			{
-				if (currState == INVALID)
-				{
-					controller->requestBusTransaction(addr,BUSRDX,processorID);
-					setState(addr,MODIFIED);
-				}
-				else if (currState == SHARED)
+				if (currState == SHARED)
 				{
 					controller->requestBusTransaction(addr,BUSUPGR,processorID);
-					setState(addr,MODIFIED);
 				}
 				setState(addr,MODIFIED);
 			}
 			else if (currentProtocol == MOESI)
 			{
-				//TODO
+				if (currState == SHARED || currState == OWNER)
+				{
+					controller->requestBusTransaction(addr,BUSUPGR,processorID);
+				}
+				setState(addr,MODIFIED);
 			}
 		}
 	}
@@ -154,25 +115,21 @@ cacheLine * Cache::findLine(ulong addr)
 	i   = calcIndex(addr);
 
 	for(j=0; j<assoc; j++)
-	{
 		if(cache[i][j].isValid())
-		{
 			if(cache[i][j].getTag() == tag)
 			{
-				pos = j; break;
+				pos = j; break; 
 			}
-			if(pos == assoc)
-				return NULL;
-			else
-				return &(cache[i][pos]);
-		}
-	}
+	if(pos == assoc)
+		return NULL;
+	else
+		return &(cache[i][pos]); 
 }
 
 /*upgrade LRU line to be MRU line*/
 void Cache::updateLRU(cacheLine *line)
 {
-	line->setSeq(currentCycle);  
+	line->setSeq(currentCycle);
 }
 
 /*return an invalid line as LRU, if any, otherwise return LRU line*/
@@ -207,7 +164,7 @@ cacheLine *Cache::findLineToReplace(ulong addr)
 }
 
 /*allocate a new line*/
-cacheLine *Cache::fillLine(ulong addr)
+cacheLine *Cache::fillLine(ulong addr,processorAction action)
 { 
 	ulong tag;
 	cacheState newState;
@@ -215,54 +172,47 @@ cacheLine *Cache::fillLine(ulong addr)
 	cacheLine *victim = findLineToReplace(addr);
 	assert(victim != 0);
 
-	if(currentProtocol == MOESI)
-	{
-		if (victim->getState() == OWNER)
-		{
-			//TODO:Check
-			writeBack(addr);
-			recordStateChange(OWNER,INVALID);
-		}
-	}
-	else if (victim->getState() == MODIFIED)
+	//if(currentProtocol == MOESI)
+	//{
+	//	if (victim->getState() == OWNER)
+	//	{
+	//		//TODO:Check
+	//		writeBack(addr);
+	//		recordStateChange(OWNER,INVALID);
+	//	}
+	//}
+	if (victim->getState() == MODIFIED)
 	{
 		//TODO:Check
 		writeBack(addr);
-		recordStateChange(MODIFIED,INVALID);
 	}
 
 	tag = calcTag(addr);
 	victim->setTag(tag);
-	if (controller->copiesExist(addr,processorID) == false)
+
+	//TODO: write code for cache to cache transfers.
+	if (action == PRRD)
 	{
 		if (currentProtocol == MSI)
 		{
 			newState = SHARED;
-			recordStateChange(INVALID,SHARED);
 		}
-		else
+		//For MESI and MOESI, EXCLUSIVE if copies do not exist;
+		else if (controller->copiesExist(addr,processorID) == false)
 		{
 			newState = EXCLUSIVE;
-			recordStateChange(INVALID,EXCLUSIVE);
 		}
-	}
-	else
-	{
-		switch(controller->getBlockState(addr))
+		else 
 		{
-		case MODIFIED:
-		case OWNER:
-		case EXCLUSIVE:
-		case SHARED:
-		case INVALID:
-		default:
-			cout<<"\nWhat?\n";
-			exit(0);
+			newState = SHARED;
 		}
 	}
+	else if (action == PRWR)
+	{
+		newState = MODIFIED;
+	}
+	recordStateChange(INVALID,newState);
 	victim->setState(newState);
-	/**note that this cache line has been already 
-	upgraded to MRU in the previous function (findLineToReplace)**/
 
 	return victim;
 }
@@ -274,7 +224,7 @@ void Cache::printStats()
 	printf("\n03. number of writes:				%ld",writes);
 	printf("\n04. number of write misses:			%ld",writeMisses);
 	printf("\n05. number of write backs:			%ld",writeBacks);
-	printf("\n06. number of invalid to exclusive (INV->EXC):	%ld",stateChangeMatrix[INVALID][SHARED]);
+	printf("\n06. number of invalid to exclusive (INV->EXC):	%ld",stateChangeMatrix[INVALID][EXCLUSIVE]);
 	printf("\n07. number of invalid to shared (INV->SHD):	%ld",stateChangeMatrix[INVALID][SHARED]);
 	printf("\n08. number of modified to shared (MOD->SHD):	%ld",stateChangeMatrix[MODIFIED][SHARED]);
 	printf("\n09. number of exclusive to shared (EXC->SHD):	%ld",stateChangeMatrix[EXCLUSIVE][SHARED]);
@@ -283,13 +233,13 @@ void Cache::printStats()
 	printf("\n12. number of exclusive to modified (EXC->MOD):	%ld",stateChangeMatrix[EXCLUSIVE][MODIFIED]);
 	printf("\n13. number of owned to modified (OWN->MOD):	%ld",stateChangeMatrix[OWNER][MODIFIED]);
 	printf("\n14. number of modified to owned (MOD->OWN):	%ld",stateChangeMatrix[MODIFIED][OWNER]);
-	//printf("\n15. number of cache to cache transfers:		%ld",stateChangeMatrix[INVALID][SHARED]);
+	printf("\n15. number of cache to cache transfers:		%d",transfers);
 	printf("\n16. number of interventions:			%ld",interventions);
 	printf("\n17. number of invalidations:			%ld",invalidations);
 	printf("\n18. number of flushes:				%ld",flushes);
 }
 
-void Cache::setController(IMemoryController &memController)
+void Cache::setController(MemoryController &memController)
 {
 	controller = &memController;
 }
@@ -297,22 +247,20 @@ void Cache::setController(IMemoryController &memController)
 int Cache::setState(ulong addr,cacheState newState,bool isFlushNeeded)
 {
 	cacheState oldState = getState(addr);
-	if (oldState == UNCACHED)
-	{
-		return -1;
-	}
-	else
-	{
-		setState(addr,newState);
-		return 0;
-	}
+	cacheLine *currLine = findLine(addr);
+	//if (oldState == INVALID)
+	//{
+		//return -1;
+	//}
 	recordStateChange(oldState,newState);
 	if (newState == INVALID)
 		invalidations++;
-	else if (newState == SHARED && oldState != UNCACHED)
+	else if (oldState == MODIFIED && (newState == OWNER || newState == SHARED))
 		interventions++;
 	if (isFlushNeeded == true)
 		flushes++;
+	currLine->setState(newState);
+	return 0;
 }
 
 bool Cache::hasLine(ulong addr)
@@ -325,14 +273,16 @@ cacheState Cache::getState(ulong addr)
 {
 	cacheLine *temp;
 	temp = findLine(addr);
+	cacheState state;
 	if (temp == NULL)
 	{
-		return UNCACHED;
+		state = INVALID;
 	}
 	else
 	{
-		return temp->getState();
+		state =  temp->getState();
 	}
+	return state;
 }
 
 void Cache::recordStateChange(cacheState oldState,cacheState newState)
@@ -340,56 +290,156 @@ void Cache::recordStateChange(cacheState oldState,cacheState newState)
 	stateChangeMatrix[oldState][newState]++;
 }
 
-void Cache::snoopBusTransaction(ulong addr,busTransaction transaction)
+bool Cache::snoopBusTransaction(ulong addr,busTransaction transaction)
 {
-	//TODO: check flushOpts
+	//TODO: check flushOpts - not needed.
 	cacheState tempState = getState(addr);
-	if (tempState != UNCACHED)
+	bool flushNeeded = false;
+	if (currentProtocol == MSI)
 	{
-		if (currentProtocol == MSI)
+		if (transaction == BUSRD)
 		{
-			if (transaction == BUSRD)
+			if (tempState == MODIFIED)
 			{
-				if (tempState == MODIFIED)
-				{
-					setState(addr,SHARED,true);
-				}
-			}
-			else if (transaction == BUSRDX)
-			{
-				if (tempState == SHARED)
-				{
-					setState(addr,INVALID,true);
-				}
+				flushNeeded = true;
+				setState(addr,SHARED,flushNeeded);
 			}
 		}
-		else if (currentProtocol == MESI)
+		else if (transaction == BUSRDX)
 		{
-			if (transaction == BUSRD)
+			if (tempState == SHARED)
 			{
-				if (tempState == MODIFIED || tempState == EXCLUSIVE)
-				{
-					setState(addr,SHARED,true);
-				}
+				setState(addr,INVALID);
 			}
-			else if (transaction == BUSRDX)
+			else if (tempState == MODIFIED)
 			{
-				if (tempState == SHARED || tempState == EXCLUSIVE || tempState == MODIFIED)
-				{
-					setState(addr,INVALID,true);
-				}
+				flushNeeded = true;
+				setState(addr,INVALID,flushNeeded);
 			}
-			else if (transaction == BUSUPGR)
+		}
+	}
+	else if (currentProtocol == MESI)
+	{
+		if (transaction == BUSRD)
+		{
+			if (tempState == MODIFIED)
 			{
-				if (tempState == SHARED)
+				flushNeeded = true;
+				setState(addr,SHARED,flushNeeded);
+			}
+			else if (tempState == EXCLUSIVE)
+			{
+				setState(addr,SHARED);
+			}
+		}
+		else if (transaction == BUSRDX)
+		{
+			if (tempState == MODIFIED)
+			{
+				flushNeeded = true;
+				setState(addr,INVALID,flushNeeded);
+			}
+			else if (tempState == SHARED || tempState == EXCLUSIVE)
+			{
+				setState(addr,INVALID);
+			}
+		}
+		else if (transaction == BUSUPGR)
+		{
+			if (tempState == SHARED)
+			{
+				setState(addr,INVALID);
+			}
+		}
+	}
+	else if (currentProtocol == MOESI)
+	{
+		//TODO
+		if (transaction == BUSRD)
+		{
+			if (tempState == MODIFIED)
+			{
+				flushNeeded = true;
+				setState(addr,OWNER,flushNeeded);
+			}
+			else if (tempState == OWNER)
+			{
+				flushes++;
+			}
+			else if (tempState == EXCLUSIVE)
+			{
+				setState(addr,SHARED);
+			}
+		}
+		else if (transaction == BUSRDX)
+		{
+			if (tempState != INVALID)
+			{
+				if (tempState != SHARED)
+				{
+					flushNeeded = true;
+					setState(addr,INVALID,flushNeeded);
+				}
+				else
 				{
 					setState(addr,INVALID);
 				}
 			}
 		}
-		else if (currentProtocol == MOESI)
+		else if (transaction == BUSUPGR)
 		{
-			//TODO
+			if (tempState == SHARED)
+			{
+				setState(addr,INVALID);
+			}
+			else if (tempState == OWNER)
+			{
+				setState(addr,INVALID);
+			}
 		}
 	}
+	return flushNeeded;
+}
+
+void Cache::init(coherenceProtocol protocol,int processorID)
+{
+	ulong i,j;
+	for(i = 0;i <= INVALID; i++)
+	{
+		for (j = 0; j <= INVALID; j++)
+		{
+			stateChangeMatrix[i][j] = 0;
+		}
+	}
+
+
+	tagMask =0;
+	for(i=0;i<log2Sets;i++)
+	{
+		tagMask <<= 1;
+		tagMask |= 1;
+	}
+
+	for(i=0; i<=sets; i++)
+	{
+		vector<cacheLine> tempCache;
+		for(j=0; j<=assoc; j++) 
+		{
+			cacheLine tempBlock;
+			tempBlock.invalidate();
+			tempCache.push_back(tempBlock);
+		}
+		cache.push_back(tempCache);
+	}
+	//cache = new cacheLine*[sets];
+	//for(i=0; i<sets; i++)
+	//{
+	//	cache[i] = new cacheLine[assoc];
+	//	for(j=0; j<assoc; j++) 
+	//	{
+	//		cache[i][j].invalidate();
+	//	}
+	//}
+	currentProtocol = protocol;
+	this->processorID = processorID;
 }

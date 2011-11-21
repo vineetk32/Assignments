@@ -33,6 +33,10 @@ enum busTransaction {
 	FLUSHOPT,
 	FLUSHWB
 };
+enum processorAction {
+	PRRD = 0,
+	PRWR
+};
 
 class cacheLine 
 {
@@ -43,7 +47,7 @@ protected:
 
 
 public:
-	cacheLine()                          { tag = 0; state = UNCACHED; }
+	cacheLine()                          { tag = 0; state = INVALID; }
 	ulong getTag()                       { return tag; }
 	cacheState getState()                { return state;}
 	ulong getSeq()                       { return seq; }
@@ -52,20 +56,6 @@ public:
 	void setTag(ulong a)                 { tag = a; }
 	void invalidate()                    { tag = 0; state = INVALID; }//useful function
 	bool isValid()                       { return ((state) != INVALID); }
-};
-
-
-class MemoryBlock {
-private:
-	//ulong addr;
-	int ownerProcessor;
-	cacheState state;
-	
-public:
-	MemoryBlock()                         { ownerProcessor = -1; state = UNCACHED; }
-	void setState(cacheState newState)    { state = newState; }
-	cacheState getState()                 { return state; }
-	
 };
 
 #endif
