@@ -40,11 +40,14 @@ void Cache::Access(ulong addr,uchar op)
 	{
 		if (op == 'w') 
 		{
-			writeMisses++;
 			//printf("\n Write Miss: %x",addr);
+			writeMisses++;
 			if (currentProtocol != MSI)
 			{
-				transfers += controller->requestBusTransaction(addr,BUSRDX,processorID);
+				if (controller->requestBusTransaction(addr,BUSRDX,processorID) > 0)
+				{
+					transfers++;
+				}
 			}
 			else
 			{
@@ -58,7 +61,10 @@ void Cache::Access(ulong addr,uchar op)
 			//printf("\n Read Miss: %ld",addr);
 			if (currentProtocol != MSI)
 			{
-				transfers += controller->requestBusTransaction(addr,BUSRD,processorID);
+				if (controller->requestBusTransaction(addr,BUSRD,processorID) > 0)
+				{
+					transfers++;
+				}
 			}
 			else
 			{
@@ -66,9 +72,6 @@ void Cache::Access(ulong addr,uchar op)
 			}
 			fillLine(addr,PRRD);
 		}
-		
-		//TODO:update cache to cache transfer counter.
-
 	}
 	else
 	{
@@ -89,7 +92,10 @@ void Cache::Access(ulong addr,uchar op)
 			{
 				if (currState == SHARED)
 				{
-					controller->requestBusTransaction(addr,BUSUPGR,processorID);
+					if (controller->requestBusTransaction(addr,BUSUPGR,processorID) > 0)
+					{
+						transfers++;
+					}
 				}
 				setState(addr,MODIFIED);
 			}
@@ -97,7 +103,10 @@ void Cache::Access(ulong addr,uchar op)
 			{
 				if (currState == SHARED || currState == OWNER)
 				{
-					controller->requestBusTransaction(addr,BUSUPGR,processorID);
+					if (controller->requestBusTransaction(addr,BUSUPGR,processorID) > 0)
+					{
+						transfers++;
+					}
 				}
 				setState(addr,MODIFIED);
 			}
@@ -172,15 +181,15 @@ cacheLine *Cache::fillLine(ulong addr,processorAction action)
 	cacheLine *victim = findLineToReplace(addr);
 	assert(victim != 0);
 
-	//if(currentProtocol == MOESI)
-	//{
-	//	if (victim->getState() == OWNER)
-	//	{
-	//		//TODO:Check
-	//		writeBack(addr);
-	//		recordStateChange(OWNER,INVALID);
-	//	}
-	//}
+	if(currentProtocol == MOESI)
+	{
+		if (victim->getState() == OWNER)
+		{
+			//todo:check
+			writeBack(addr);
+			recordStateChange(OWNER,INVALID);
+		}
+	}
 	if (victim->getState() == MODIFIED)
 	{
 		//TODO:Check
@@ -329,7 +338,12 @@ bool Cache::snoopBusTransaction(ulong addr,busTransaction transaction)
 			}
 			else if (tempState == EXCLUSIVE)
 			{
+				flushNeeded = true; //Because the cache-to-cache transfer is needed.
 				setState(addr,SHARED);
+			}
+			else if (tempState == SHARED)
+			{
+				flushNeeded = true;
 			}
 		}
 		else if (transaction == BUSRDX)
@@ -341,6 +355,7 @@ bool Cache::snoopBusTransaction(ulong addr,busTransaction transaction)
 			}
 			else if (tempState == SHARED || tempState == EXCLUSIVE)
 			{
+				flushNeeded = true;
 				setState(addr,INVALID);
 			}
 		}
@@ -354,7 +369,6 @@ bool Cache::snoopBusTransaction(ulong addr,busTransaction transaction)
 	}
 	else if (currentProtocol == MOESI)
 	{
-		//TODO
 		if (transaction == BUSRD)
 		{
 			if (tempState == MODIFIED)
@@ -365,9 +379,11 @@ bool Cache::snoopBusTransaction(ulong addr,busTransaction transaction)
 			else if (tempState == OWNER)
 			{
 				flushes++;
+				flushNeeded = true;
 			}
 			else if (tempState == EXCLUSIVE)
 			{
+				flushNeeded = true;
 				setState(addr,SHARED);
 			}
 		}
@@ -375,7 +391,12 @@ bool Cache::snoopBusTransaction(ulong addr,busTransaction transaction)
 		{
 			if (tempState != INVALID)
 			{
-				if (tempState != SHARED)
+				if (tempState == EXCLUSIVE)
+				{
+					flushNeeded = true;
+					setState(addr,INVALID);
+				}
+				else if (tempState == MODIFIED || tempState == OWNER)
 				{
 					flushNeeded = true;
 					setState(addr,INVALID,flushNeeded);
