@@ -29,14 +29,40 @@ int MPI_Send(void *buf, int count, MPI_Datatype datatype, int dest, int tag,MPI_
 int MPI_Finalize(void)
 {
 
-	int i,size,rank;
+	int i,size,rank,j;
 	MPI_Comm_size(MPI_COMM_WORLD,&size);
 	MPI_Comm_rank(MPI_COMM_WORLD,&rank);
-	printf("%d:myCallList - ",rank);
-	for (i = 0; i < size; i++)
+	MPI_Status status;
+	if (rank > 0)
 	{
-		printf("%d\t",myCallList[i]);	
+		PMPI_Send(myCallList,size,MPI_INT,0,rank,MPI_COMM_WORLD);
 	}
-	printf("\n");
+	else if (rank == 0)
+	{
+		FILE *fout = fopen("matrix.data","w");
+		if (fout == NULL)
+		{
+			printf("\nCouldnt open file!");
+			MPI_Abort(MPI_COMM_WORLD,0);
+		}
+
+		for ( j = 0; j < size; j++)
+		{
+			fprintf(fout,"%d ",myCallList[j]);
+		}
+		for(i = 1; i < size; i++)
+		{
+			for ( j = 0; j < size; j++)
+				myCallList[j] = 0;
+
+			PMPI_Recv(myCallList,size,MPI_INT,i,i,MPI_COMM_WORLD,&status);
+
+			fprintf(fout,"\n");
+			for ( j = 0; j < size; j++)
+				fprintf(fout,"%d ",myCallList[j]);
+		}
+		fclose(fout);
+			
+	}
 	return PMPI_Finalize();
 }
