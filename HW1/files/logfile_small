@@ -1,0 +1,26 @@
+Jan 14 10:32:45 ssh[1234]: Login attempt failed.
+Jan 14 10:32:55 ssh[1234]: Login attempt failed.
+Jan 14 10:32:58 grep[2534]: Invalid regular expression.
+Jan 14 10:33:05 ssh[1234]: Login attempt failed.
+Jan 14 10:33:08 grep[2534]: Unmatched character "^".
+Jan 14 10:33:09 sed[2534]: Malformed regular expression.
+Jan 14 10:33:15 ssh[1234]: Login attempt failed.
+Jan 14 10:33:16 awk[2534]: Unmatched "\n".
+Jan 14 10:33:16 awk[2534]: Terminating.
+Jan 14 10:33:17 connect[3478]: Connect failed. Process Terminating.
+Jan 14 10:33:25 ssh[1234]: Login attempt failed.
+Jan 14 10:33:35 ssh[1234]: Login Successful! 
+Jan 14 10:33:36 grep[2534]: Terminated on user input!
+Jan 14 10:32:45 ssh[1234]: Login attempt failed.
+Jan 14 10:32:55 ssh[1234]: Login attempt failed.
+Jan 14 10:32:58 grep[2534]: Invalid regular expression.
+Jan 14 10:33:05 ssh[1234]: Login attempt failed.
+Jan 14 10:33:08 grep[2534]: Unmatched character "^".
+Jan 14 10:33:09 sed[2534]: Malformed regular expression.
+Jan 14 10:33:15 ssh[1234]: Login attempt failed.
+Jan 14 10:33:16 awk[2534]: Unmatched "\n".
+Jan 14 10:33:16 awk[2534]: Terminating.
+Jan 14 10:33:17 connect[3478]: Connect failed. Process Terminating.
+Jan 14 10:33:25 ssh[1234]: Login attempt failed.
+Jan 14 10:33:35 ssh[1234]: Login Successful! 
+Jan 14 10:33:36 grep[2534]: Terminated on user input!:
