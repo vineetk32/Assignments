@@ -1,17 +1,17 @@
 CC=gcc
-FLAGS=-lrt
+FLAGS=-lrt -ggdb
 OBJDIR=objs
 BINDIR=bin
 
-OBJS = logStats.o
+OBJS = logStats.o util.o
 
 %.o:	%.c
-	${CC} -c -o ${OBJDIR}/$@ $< 
+	${CC} -c -o ${OBJDIR}/$@ $< -ggdb
 
-mt:	logStats_t.o
-	${CC} -o ${BINDIR}/logStats_t.x ${OBJDIR}/logStats_t.o ${FLAGS} 
+mt:	util.o logStats_t.o
+	${CC} -o ${BINDIR}/logStats_t.x ${OBJDIR}/logStats_t.o ${OBJDIR}/util.o ${FLAGS} -lpthread
 
-nmt:	logStats.o
+nmt:	util.o logStats.o
 	${CC} -o ${BINDIR}/logStats.x ${OBJDIR}/logStats.o ${FLAGS} 
 
 clean:

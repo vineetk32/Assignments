@@ -5,17 +5,13 @@
 #include "util.h"
 #include <pthread.h>
 
-#define MAX_WORDS 20
-#define MAX_WORD_LENGTH 256
-#define BUFFER_SIZE 1024
-#define MAX_PROCESSES 12
 #define MAX_THREADS 10
-#define NUM_THREADS 3
+#define NUM_THREADS 1
 
-typedef struct threadPackage_t
+struct threadPackage_t
 {
 
-	char *filename;
+	char filename[64];
 	int startOffset;
 	int endOffset;
 	char **processList;
@@ -24,12 +20,15 @@ typedef struct threadPackage_t
 	//int *totalLines;
 };
 
-void threadFunc(threadPackage_t *package)
+void *threadFunc(void *threadPackage)
 {
 	char **splitBuff;
 	int i,numTokens;
 	FILE *flog;
+	struct threadPackage_t *package;
 	char tempBuff[BUFFER_SIZE] = {'\0'};
+
+	package = (struct threadPackage_t *) threadPackage; 
 
 	//Allocate the array which will be used to hold each individual word in a line.
 	splitBuff = (char **) malloc ( MAX_WORDS * sizeof(char *));
@@ -47,6 +46,7 @@ void threadFunc(threadPackage_t *package)
 	//Read the log file line by line
 	while (fgets(tempBuff,BUFFER_SIZE,flog) != NULL)
 	{
+		//TODO: Apparently, strtok_r is thread-safe only for dynamic mem. Check
 		numTokens = splitLine(tempBuff,splitBuff," :[]");
 		
 		//Check if the current logLine is written by a process we're interested in.
@@ -106,31 +106,32 @@ int main(int argc, char **argv)
 	int processCount[MAX_THREADS][MAX_PROCESSES],offsetArray[MAX_THREADS];
 	struct timespec start_time,end_time;
 	pthread_t threads[MAX_THREADS];
-	threadPackage_t threadPackage;
+	struct threadPackage_t threadPackage;
 
 	if (argc != 3)
 	{
-		printf("\nIncorrect usage!\n Usage - %s path-to-log-file path-to-process-list-file.\n",argv[0]);
+		printf("Incorrect usage!\nUsage - %s path-to-log-file path-to-process-list-file.\n",argv[0]);
 		return -1;
 	}
 
 	clock_gettime(CLOCK_MONOTONIC,&start_time);
 
 	fproc = fopen(argv[2],"r");
-	if (fproc != NULL)
+	if (fproc == NULL)
 	{
 		printf("\nError opening processfile!\n");
 		return -1;
 	}
 	for (i = 0; i < MAX_THREADS; i++)
 	{
-		for (j = 0; i < MAX_PROCESSES; j++)
+		for (j = 0; j < MAX_PROCESSES; j++)
 		{
 			processCount[i][j] = 0;
 		}
 	}
 	
 	//Read every processName from the processes file
+	i = 0;
 	while (fscanf(fproc,"%s",tempBuff) >= 0)
 	{
 		processList[i] = strdup(tempBuff);
@@ -140,7 +141,7 @@ int main(int argc, char **argv)
 	numProcesses = i;
 	
 	flog = fopen(argv[1],"r");
-	if (flog != NULL)
+	if (flog == NULL)
 	{
 		printf("\nError opening logfile!\n");
 		return -1;
@@ -179,12 +180,12 @@ int main(int argc, char **argv)
 		{
 			threadPackage.endOffset = - 1;
 		}
-		pthread_create(&threads[i],NULL,threadFunc,&threadPackage);
+		pthread_create(&threads[i],NULL,&threadFunc,&threadPackage);
 	}
 
 	for (i = 0 ;i < NUM_THREADS; i++)
 	{
-		if (pthread_join(thread[i],NULL) != 0)
+		if (pthread_join(threads[i],NULL) != 0)
 		{
 			printf("\nERROR: pthread_join returned non-zero!\n");
 		}
@@ -200,9 +201,9 @@ int main(int argc, char **argv)
 		totalLines += processCount[i][j];
 	}
 
-	clock_gettime(CLOCK_MONOTONIC,&start_time);
+	clock_gettime(CLOCK_MONOTONIC,&end_time);
 
-	printf("\n%d: %d: %d: %lf: ",totalLines,1,totalLines,(end_time.tv_sec - start_time.tv_sec) +  (end_time.tv_nsec - start_time.tv_nsec)/1000000000.0);
+	printf("\n%d: %d: %d: %lfs: ",totalLines,1,totalLines,(end_time.tv_sec - start_time.tv_sec) +  (end_time.tv_nsec - start_time.tv_nsec)/1000000000.0);
 	for(i = 0; i < numProcesses;i++)
 	{
 		printf("\npName:%s count:%d",processList[i],processCount[NUM_THREADS][i]);
@@ -212,7 +213,7 @@ int main(int argc, char **argv)
 	//Be a good boy and release all the memory
 	for (i = 0; i < numProcesses; i++)
 	{
-		free(processList);
+		free(processList[i]);
 	}
 	return 0;
 
