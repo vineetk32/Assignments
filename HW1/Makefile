@@ -1,18 +1,24 @@
 CC=gcc
+#FLAGS=-lrt -ggdb
 FLAGS=-lrt
 OBJDIR=objs
 BINDIR=bin
+#COMPILE_FLAGS = -D__DEBUG
+COMPILE_FLAGS =
 
-OBJS = logStats.o
+OBJS = p3.o util.o
+
+info:
+	echo "There is no 'all' target defined. Run make a3/a4/a5 to generate the a3.x/a4.x/libmythread.a"
 
 %.o:	%.c
-	${CC} -c -o ${OBJDIR}/$@ $< 
+	${CC} -c -o $@ $< -ggdb $(COMPILE_FLAGS)
 
-mt:	logStats_t.o
-	${CC} -o ${BINDIR}/logStats_t.x ${OBJDIR}/logStats_t.o ${FLAGS} 
+a3:	util.o p3.o
+	${CC} -o p3.x p3.o util.o ${FLAGS} -lpthread -lrt
 
-nmt:	logStats.o
-	${CC} -o ${BINDIR}/logStats.x ${OBJDIR}/logStats.o ${FLAGS} 
+a4:
+	nvcc p4.cu -o p4.x
 
 clean:
-	rm ${BINDIR}/*.x ${OBJDIR}/*.o
+	rm *.x *.o
