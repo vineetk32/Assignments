@@ -1,0 +1,19 @@
+A word1
+A word2
+A word3
+A word4
+A word5
+M
+A word6
+A word7
+R word1
+R word5
+D word2
+M
+R word2
+D word1
+A word10
+A word11
+R word62
+R word7
+M
