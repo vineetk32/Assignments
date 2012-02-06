@@ -22,7 +22,8 @@ enum cacheState {
 enum coherenceProtocol {
 	MSI = 0,
 	MESI,
-	MOESI
+	MOESI,
+	VPROTO
 };
 
 enum busTransaction {

@@ -39,6 +39,7 @@ bool MemoryController::copiesExist(ulong addr,int processorID)
 int MemoryController::requestBusTransaction(ulong addr,busTransaction transaction,int processorID)
 {
 	int count = 0;
+	cacheArray->at(processorID).incrementBusTransactions();
 	for (int i = 0; i < cacheArray->size(); i++)
 	{
 		if ( i != processorID)
@@ -70,4 +71,18 @@ int MemoryController::getNumCopies(ulong addr,int processorID)
 	return count;
 }
 
+bool MemoryController::hasOwner(ulong addr)
+{
+	for (int i = 0; i < cacheArray->size(); i++)
+	{
+		if (cacheArray->at(i).hasLine(addr) == true)
+		{
+			if (cacheArray->at(i).getState(addr) == OWNER)
+			{
+				return true;
+			}
+		}
+	}
+	return false;
+}
 

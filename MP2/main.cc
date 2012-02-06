@@ -53,6 +53,10 @@ int main(int argc, char *argv[])
 	{
 		currProtocol = MOESI;
 	}
+	else if (protocol == 3)
+	{
+		currProtocol = VPROTO;
+	}
 	else 
 	{
 		printf("\nInvalid protocol chosen: %d",protocol);
@@ -81,7 +85,7 @@ int main(int argc, char *argv[])
 	//*******print out simulator configuration here*******//
 	//****************************************************//
 
-	printf("\n===== 506 SMP Simulator Configuration =====");
+	printf("===== 506 SMP Simulator Configuration =====");
 	printf("\nL1_SIZE:\t\t\t%d",cache_size);
 	printf("\nL1_ASSOC:\t\t\t%d",cache_assoc);
 	printf("\nL1_BLOCKSIZE:\t\t\t%d",blk_size);
@@ -92,7 +96,9 @@ int main(int argc, char *argv[])
 		printf("\nCOHERENCE PROTOCOL:\t\tMESI");
 	else if (currProtocol == MOESI)
 		printf("\nCOHERENCE PROTOCOL:\t\tMOESI");
-	printf("\nTRACE FILE:\t\t\t %s",fname);
+	else if (currProtocol == MOESI)
+		printf("\nCOHERENCE PROTOCOL:\t\tVPROTO");
+	printf("\nTRACE FILE:\t\t\t%s",fname);
  
 	//*********************************************//
 	//*****create an array of caches here**********//

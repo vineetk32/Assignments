@@ -21,7 +21,7 @@ Cache::Cache(int s,int a,int b)
 	log2Sets        = (ulong)(log2(int(sets)));
 	log2Blk         = (ulong)(log2(int(b)));
 	
-	invalidations = interventions = flushes = transfers = 0;
+	invalidations = interventions = flushes = transfers = coherenceMisses = busTransactions = 0;
 }
 
 /**you might add other parameters to Access()
@@ -42,6 +42,15 @@ void Cache::Access(ulong addr,uchar op)
 		{
 			//printf("\n Write Miss: %x",addr);
 			writeMisses++;
+
+			vector<ulong>::iterator it;
+			it = find(invalidatedBlocks.begin(),invalidatedBlocks.end(),addr);
+			if ( it != invalidatedBlocks.end())
+			{
+				coherenceMisses++;
+				invalidatedBlocks.erase(it);
+			}
+
 			if (currentProtocol != MSI)
 			{
 				if (controller->requestBusTransaction(addr,BUSRDX,processorID) > 0)
@@ -58,6 +67,14 @@ void Cache::Access(ulong addr,uchar op)
 		else if (op == 'r')
 		{
 			readMisses++;
+
+			vector<ulong>::iterator it;
+			it = find(invalidatedBlocks.begin(),invalidatedBlocks.end(),addr);
+			if ( it != invalidatedBlocks.end())
+			{
+				coherenceMisses++;
+				invalidatedBlocks.erase(it);
+			}
 			//printf("\n Read Miss: %ld",addr);
 			if (currentProtocol != MSI)
 			{
@@ -99,7 +116,7 @@ void Cache::Access(ulong addr,uchar op)
 				}
 				setState(addr,MODIFIED);
 			}
-			else if (currentProtocol == MOESI)
+			else if (currentProtocol == MOESI || currentProtocol == VPROTO)
 			{
 				if (currState == SHARED || currState == OWNER)
 				{
@@ -181,7 +198,7 @@ cacheLine *Cache::fillLine(ulong addr,processorAction action)
 	cacheLine *victim = findLineToReplace(addr);
 	assert(victim != 0);
 
-	if(currentProtocol == MOESI)
+	if(currentProtocol == MOESI || currentProtocol == VPROTO)
 	{
 		if (victim->getState() == OWNER)
 		{
@@ -242,10 +259,12 @@ void Cache::printStats()
 	printf("\n12. number of exclusive to modified (EXC->MOD):	%ld",stateChangeMatrix[EXCLUSIVE][MODIFIED]);
 	printf("\n13. number of owned to modified (OWN->MOD):	%ld",stateChangeMatrix[OWNER][MODIFIED]);
 	printf("\n14. number of modified to owned (MOD->OWN):	%ld",stateChangeMatrix[MODIFIED][OWNER]);
-	printf("\n15. number of cache to cache transfers:		%d",transfers);
+	printf("\n15. number of cache to cache transfers:		%ld",transfers);
 	printf("\n16. number of interventions:			%ld",interventions);
 	printf("\n17. number of invalidations:			%ld",invalidations);
 	printf("\n18. number of flushes:				%ld",flushes);
+	//printf("\n19. number of coherence misses:			%ld",coherenceMisses);
+	//printf("\n20. number of bus transactions:			%ld",busTransactions);
 }
 
 void Cache::setController(MemoryController &memController)
@@ -263,7 +282,10 @@ int Cache::setState(ulong addr,cacheState newState,bool isFlushNeeded)
 	//}
 	recordStateChange(oldState,newState);
 	if (newState == INVALID)
+	{
 		invalidations++;
+		invalidatedBlocks.push_back(addr);
+	}
 	else if (oldState == MODIFIED && (newState == OWNER || newState == SHARED))
 		interventions++;
 	if (isFlushNeeded == true)
@@ -367,8 +389,8 @@ bool Cache::snoopBusTransaction(ulong addr,busTransaction transaction)
 			}
 		}
 	}
-	else if (currentProtocol == MOESI)
-	{
+	else if (currentProtocol == MOESI || currentProtocol == VPROTO)
+	{ 
 		if (transaction == BUSRD)
 		{
 			if (tempState == MODIFIED)
@@ -385,6 +407,18 @@ bool Cache::snoopBusTransaction(ulong addr,busTransaction transaction)
 			{
 				flushNeeded = true;
 				setState(addr,SHARED);
+			}
+			//In vineet protocol, if there is no owner, the shared copies will provide the block on a cache read.
+			//This will save off-chip bandwidth usage.
+			else if (currentProtocol == VPROTO)
+			{
+				if (tempState == SHARED)
+				{
+					if (controller->hasOwner(addr) == false)
+					{
+						flushNeeded = true;
+					}
+				}
 			}
 		}
 		else if (transaction == BUSRDX)
@@ -452,15 +486,6 @@ void Cache::init(coherenceProtocol protocol,int processorID)
 		}
 		cache.push_back(tempCache);
 	}
-	//cache = new cacheLine*[sets];
-	//for(i=0; i<sets; i++)
-	//{
-	//	cache[i] = new cacheLine[assoc];
-	//	for(j=0; j<assoc; j++) 
-	//	{
-	//		cache[i][j].invalidate();
-	//	}
-	//}
 	currentProtocol = protocol;
 	this->processorID = processorID;
 }

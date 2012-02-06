@@ -15,6 +15,7 @@ Ahmad Samih & Yan Solihin
 #include <vector>
 #include <assert.h>
 #include <map>
+#include <algorithm>
 #include "defines.h"
 
 
@@ -28,7 +29,7 @@ protected:
 	int processorID;
 
 	ulong size, lineSize, assoc, sets, log2Sets, log2Blk, tagMask, numLines;
-	ulong reads,readMisses,writes,writeMisses,writeBacks,transfers;
+	ulong reads,readMisses,writes,writeMisses,writeBacks,transfers,coherenceMisses, busTransactions;
 
 	MemoryController *controller;
 	coherenceProtocol currentProtocol;
@@ -41,6 +42,8 @@ protected:
 
 	vector<vector<cacheLine> > cache;
 	//cacheLine **cache;
+
+	vector<ulong> invalidatedBlocks;
 
 	ulong calcTag(ulong addr)     { return (addr >> (log2Blk) );}
 	ulong calcIndex(ulong addr)  { return ((addr >> log2Blk) & tagMask);}
@@ -66,6 +69,8 @@ public:
 	ulong getReads(){return reads;}
 	ulong getWrites(){return writes;}
 	ulong getWB(){return writeBacks;}
+	void incrementBusTransactions(){busTransactions++;}
+
 	void  setProtocol(coherenceProtocol protocol){currentProtocol = protocol;}
 	int   getProcessorID(){ return processorID; }
 
@@ -97,6 +102,7 @@ public:
 	bool copiesExist(ulong addr,int processorID);
 	int requestBusTransaction(ulong addr,busTransaction transaction,int processorID);
 	int getNumCopies(ulong addr,int processorID);
+	bool hasOwner(ulong addr);
 };
 
 #endif

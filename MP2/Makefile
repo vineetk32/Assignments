@@ -6,9 +6,9 @@ WARN = -Wall
 
 CFLAGS = $(OPT) $(WARN) $(ERR) $(INC) $(LIB)
 
-SIM_SRC = main.cc cache.cc
+SIM_SRC = main.cc Cache.cc MemoryController.cc
 
-SIM_OBJ = main.o cache.o
+SIM_OBJ = main.o Cache.o MemoryController.o
 
 all: smp_cache
 	@echo "Compilation Done ---> nothing else to make :) "
