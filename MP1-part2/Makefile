@@ -1,6 +1,6 @@
 #----- Students, modify CC and CFLAGS as appropriate in your environment
-CC = ~/Bin/gcc43
-CFLAGS = -fopenmp
+#CC = ~/Bin/gcc43
+CFLAGS = -fopenmp -O2
 
 LIB = -lm -lc
 
