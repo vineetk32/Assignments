@@ -5,89 +5,89 @@
 
 #include "util.h"
 
-typedef struct list{
-	char *item;
-	struct list *next;
-} Node;
+typedef struct Node{
+	void *item;
+	struct Node *next;
+} Node_t;
 
-Node *begin = NULL;
-Node *end = NULL;
+typedef struct List{
+	Node_t *begin;
+	Node_t *end;
+} List_t;
 
 int searchThreads = 0;
 int insertThreads = 0;
 int deleteThreads = 0;
 
-int systemLogLevel;
-
-int addToList(char *item){
+int addToList(List_t *list,void *item,size_t bytes){
 	int success = -1;
-	char *buf = NULL;
-	Node *newItem = NULL;
+	void *buf = NULL;
+	Node_t *newItem = NULL;
 
-	newItem = (Node *) malloc(sizeof(Node));
+	newItem = (Node_t *) malloc(sizeof(Node_t));
 	if(newItem == NULL){
 		fprintf(stderr,"addToList: Malloc failed");
 		return -1;
 	}
 
-	buf = (char *) malloc(strlen(item) + 1);
+	buf = malloc(bytes+1);
 	if(buf == NULL){
 		fprintf(stderr,"addToList: Malloc failed");
 		return -1;
 	}
 
-	strcpy(buf,item);
+	memcpy(buf,item,bytes+1);
 	newItem->item = buf;
 	newItem->next = NULL;
 
-	if(begin == NULL || end == NULL){
-		begin = newItem;
-		end = newItem;
+	if(list->begin == NULL || list->end == NULL){
+		list->begin = newItem;
+		list->end = newItem;
 		return 0;
 	}
 
-	end->next = newItem;
-	end = end->next;
+	list->end->next = newItem;
+	list->end = list->end->next;
 	return 0;
 }
 
-void printList(){
-	Node *temp = NULL;
-	if(begin == NULL)
+void printList(List_t *list){
+	Node_t *temp = NULL;
+	if(list->begin == NULL)
 		return;
 
-	temp = begin;
+	temp = list->begin;
 
 	printf("==============\n");
 	while(temp!=NULL){
-		printf("%s --> " , temp->item);
+		printf("%s --> " ,(char *)  temp->item);
 		temp = temp->next;
 	}
 	printf("END");
 	printf("\n==============");
 }
 
-int removeFromList(char *item){
-	Node *temp = NULL;
-	Node *prev = NULL;
-	if(end == NULL){
+int removeFromList(List_t *list,void *item,size_t bytes){
+	Node_t *temp = NULL;
+	Node_t *prev = NULL;
+	if(list->end == NULL){
 		return -1;
 	}
 
-	temp = begin;
+	temp = list->begin;
 	prev = NULL;
 
 	while(temp != NULL){
-		if(strcmp(temp->item,item)== 0){
+		if(memcmp(temp->item,item,bytes)== 0){
 			if(prev == NULL){ 
-				begin = begin->next;
+				list->begin = list->begin->next;
 				free(temp->item);
 				free(temp);
 				return 0;
 				}
 			
 			if(temp->next == NULL){ 
-				end = prev;
+				list->end = prev;
 			}
 
 			prev->next = temp->next;
@@ -101,16 +101,16 @@ int removeFromList(char *item){
 	return -1;
 }
 
-int searchList(char *item){
-	Node * temp;
-	temp = begin;
+int searchList(List_t *list,char *item,size_t bytes){
+	Node_t * temp;
+	temp = list->begin;
 	
 	if(temp == NULL){
 		return -1;
 	}
 
 	while(temp != NULL){
-		if(strcmp(temp->item,item) == 0){
+		if(memcmp(temp->item,item,bytes) == 0){
 			return 0;
 		}
 		temp = temp->next;
@@ -127,24 +127,25 @@ void printThreadInfo(char* operation, char* value, int success, pthread_t tid){
 }
 
 
-int adder(char *line)
+int adder(List_t *list,char *line)
 {
 	if (line[0] == 'A')
 	{
-		addToList(line+2);
+		addToList(list,line+2,strlen(line+2));
 		return 0;
 	}
 	return -1;
 }
-int retriever(char *line)
+
+int retriever(List_t *list,char *line)
 {
-	return searchList(line+2);
+	return searchList(list,line+2,strlen(line+2));
 }
-int deleter(char *line)
+int deleter(List_t *list,char *line)
 {
 	if (line[0] == 'D')
 	{
-		removeFromList(line+2);
+		removeFromList(list,line+2,strlen(line+2));
 		return 0;
 	}
 	return -1;
@@ -154,6 +155,9 @@ int main(int argc , char** argv)
 {
 	FILE *finput;
 	char line[BUFFER_SIZE] = {'\0'};
+	List_t dataList;
+	dataList.begin  = NULL;
+	dataList.end = NULL;
 
 	if (argc < 2)
 	{
@@ -176,13 +180,13 @@ int main(int argc , char** argv)
 				switch(line[0])
 				{
 				case 'A':
-					adder(line);
+					adder(&dataList,line);
 					break;
 				case 'D':
-					deleter(line);
+					deleter(&dataList,line);
 					break;
 				case 'R':
-					retriever(line);
+					retriever(&dataList,line);
 					break;
 				case 'M':
 					//Ignore for now.
@@ -197,7 +201,7 @@ int main(int argc , char** argv)
 		fclose(finput);
 	}
 	printf("\nRead input. Final list - \n");
-	printList();
+	printList(&dataList);
 	return 0;
 }
 
