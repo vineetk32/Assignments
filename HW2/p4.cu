@@ -13,14 +13,18 @@
 #include<stdio.h>
 #include<stdlib.h>
 #include<string.h>
+#include <cuda_runtime.h>
 #include<sys/types.h>
+
+#ifndef _WIN32
 #include<sys/time.h>
+#endif
 
 /* Uncomment the below line to enable debug prints 
  */
-/* #define VERBOSE 1 */
+//#define VERBOSE 1
 
-#define MAX_LOGFILE_SIZE (1<<20)
+#define MAX_LOGFILE_SIZE 1501000
 #define MAX_LOGLINE_SIZE 100
 #define MAX_PROC_NUM 10
 #define MAX_PNAME_LEN 50
@@ -122,18 +126,21 @@ int main(int argc, char *argv[])
 	FILE *fp_logfile, *fp_proclist;
 	char *fileBuf=(char *)malloc(sizeof(char)*MAX_LOGFILE_SIZE);
 	char *procBuf=(char *)malloc(sizeof(char)*MAX_PROC_NUM*MAX_PNAME_LEN);
-	int numThreads=0, numBlocks=0, numThreadsPerBlock=0, fileSize=0, paddedFileSize=0, blockSize=0;
+	int numThreads=0, numBlocks=0, numThreadsPerBlock=0,  paddedFileSize=0, blockSize=0;
+	long fileSize = 0,i = 0;
 	int *blockStart=0, *blockEnd=0;
 	int numProcs, count, tot_count, pflag=0;
-	int i, j, k, start;
+	int j, k, start;
 	stats_entry_t *stats=0;
 	char *pname, proclist[MAX_PROC_NUM][MAX_PNAME_LEN];
 
 	char *dev_fileBuf;
 	int *dev_blockStart, *dev_blockEnd;
-	stats_entry_t *dev_stats;	
+	stats_entry_t *dev_stats;
 
+#ifndef _WIN32
 	struct timeval t_start, t_end;
+#endif
 	cudaEvent_t dev_t_start, dev_t_end;
 	float time_elapsed;
 
@@ -157,12 +164,14 @@ int main(int argc, char *argv[])
 	for (i=0 ; !feof(fp_proclist) ; ) {
 		i += fread(&(procBuf[i]), 1, 1, fp_proclist);
 	}
-
+	procBuf[i] = '\0';
 	/* Read up the entire logfile in a local buffer in memory. */
 	i = 0;
 	for (i=0 ; !feof(fp_logfile) ; ) {
 		i += fread(&(fileBuf[i]), 1, 1, fp_logfile);
 	}
+	fileBuf[i] = '\0';
+
 	fileSize = i;
 
 #ifdef VERBOSE
@@ -293,9 +302,9 @@ int main(int argc, char *argv[])
 			cudaEventCreate(&dev_t_start);
 			cudaEventCreate(&dev_t_end);
 			cudaThreadSynchronize();
-
+#ifndef _WIN32
 			gettimeofday(&t_start, NULL);
-
+#endif
 			/* Copy the data over to Device's Global Memory. */
 			cudaMemcpy(dev_fileBuf, fileBuf, sizeof(char)*paddedFileSize, cudaMemcpyHostToDevice);
 			cudaMemcpy(dev_blockStart, blockStart, sizeof(int)*numThreads, cudaMemcpyHostToDevice);
@@ -347,10 +356,12 @@ int main(int argc, char *argv[])
 
 			if (!pflag)
 				printf("Total Number of loglines: %d\n", tot_count);
-
+#ifndef _WIN32
 			gettimeofday(&t_end, NULL);
-
 			printf("blockSize:%d numThreads:%d totalCount:%d CPUTime:%8ld GPUTime:%f\n", blockSize, numThreads, tot_count, t_end.tv_usec - t_start.tv_usec + (t_end.tv_sec*1000000 - t_start.tv_sec*1000000),time_elapsed);
+#else
+			printf("blockSize:%d numThreads:%d totalCount:%d GPUTime:%f\n", blockSize, numThreads, tot_count,time_elapsed);
+#endif
 
 			if (!pflag)
 				pflag = 1;
