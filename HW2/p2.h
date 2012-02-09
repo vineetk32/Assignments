@@ -23,26 +23,32 @@ typedef struct retriever_thread_package
 {
 	List_t *list;
 	char *line;
-	pthread_mutex_t *deleterLock;
-	pthread_cond_t *deleterCond;
+	pthread_mutex_t *deleter_lock;
+	pthread_cond_t *deleter_cond;
+	pthread_mutex_t *retriever_lock;
+	pthread_cond_t *retriever_cond;
 } retriever_thread_package_t;
 
 typedef struct adder_thread_package
 {
 	List_t *list;
 	char *line;
-	pthread_mutex_t *adderLock;
-	pthread_cond_t *adderCond;
-	pthread_mutex_t *deleterLock;
-	pthread_cond_t *deleterCond;
+	pthread_mutex_t *adder_lock;
+	pthread_cond_t *adder_cond;
+	pthread_mutex_t *deleter_lock;
+	pthread_cond_t *deleter_cond;
 } adder_thread_package_t;
 
 typedef struct deleter_thread_package
 {
 	List_t *list;
 	char *line;
-	pthread_mutex_t *deleterLock;
-	pthread_cond_t *deleterCond;
+	pthread_mutex_t *deleter_lock;
+	pthread_cond_t *deleter_cond;
+	pthread_mutex_t *retriever_lock;
+	pthread_cond_t *retriever_cond;
+	pthread_mutex_t *adder_lock;
+	pthread_cond_t *adder_cond;
 } deleter_thread_package_t;
 
 void initList(List_t *list);
