@@ -153,15 +153,18 @@ void *adder(void *package)
 	adder_threads = 1;
 	pthread_mutex_unlock(_package->adder_lock);
 
-	//printThreadInfo("Adder",_package->line+2,addToList(_package->list,_package->line+2,strlen(_package->line+2)),pthread_self());
 	success = addToList(_package->list,_package->line+2,strlen(_package->line+2));
 
 #ifdef __DEBUG
 	printf("Adder %u: Done\n",pthread_self());
 #endif
 	printThreadInfo("Adder",_package->line+2,success,pthread_self());
+	
+	pthread_mutex_lock(_package->adder_lock);
 	adder_threads = 0;
-	pthread_cond_signal(_package->adder_cond);
+	pthread_mutex_unlock(_package->adder_lock);
+	
+	pthread_cond_broadcast(_package->adder_cond);
 	return NULL;
 }
 
@@ -172,9 +175,6 @@ void *retriever(void *package)
 	int success = -1;
 	retriever_thread_package_t *_package;
 	_package = (retriever_thread_package_t *) package;
-	pthread_mutex_lock(_package->retriever_lock);
-	retriever_threads++;
-	pthread_mutex_unlock(_package->retriever_lock);
 
 	pthread_mutex_lock(_package->deleter_lock);
 	while (deleter_threads == 1)
@@ -186,17 +186,22 @@ void *retriever(void *package)
 	}
 	pthread_mutex_unlock(_package->deleter_lock);
 
-	//printThreadInfo("Adder",_package->line+2,searchList(_package->list,_package->line+2,strlen(_package->line+2)),pthread_self());
+	pthread_mutex_lock(_package->retriever_lock);
+	retriever_threads++;
+	pthread_mutex_unlock(_package->retriever_lock);
+
 	success = searchList(_package->list,_package->line+2,strlen(_package->line+2));
-	//TODO: call printThreadInfo
+
 #ifdef __DEBUG
 	printf("Retriever %u: Done.\n",pthread_self());
 #endif
 	printThreadInfo("Retriever",_package->line+2,success,pthread_self());
+
 	pthread_mutex_lock(_package->retriever_lock);
 	retriever_threads--;
 	pthread_mutex_unlock(_package->retriever_lock);
-	pthread_cond_signal(_package->retriever_cond);
+
+	pthread_cond_broadcast(_package->retriever_cond);
 	return NULL;
 }
 
@@ -210,39 +215,42 @@ void *deleter(void *package)
 	
 	//TODO: Not the right way. Fix this.
 	pthread_mutex_lock(_package->adder_lock);
-	if (adder_threads == 1)
+	while (adder_threads == 1)
 	{
 		pthread_cond_wait(_package->adder_cond,_package->adder_lock);
 	}
 	pthread_mutex_unlock(_package->adder_lock);
 
 	pthread_mutex_lock(_package->retriever_lock);
-	if (retriever_threads == 1)
+	while (retriever_threads > 0)
 	{
 #ifdef __DEBUG
-		printf("Deleter %u: waiting for a deleter.\n",pthread_self());
+		printf("Deleter %u: waiting for a retriever.\n",pthread_self());
 #endif
 		pthread_cond_wait(_package->retriever_cond,_package->retriever_lock);
 	}
 	pthread_mutex_unlock(_package->retriever_lock);
 
 	pthread_mutex_lock(_package->deleter_lock);
-	if (deleter_threads == 1)
+	while (deleter_threads == 1)
 	{
 		pthread_cond_wait(_package->deleter_cond,_package->deleter_lock);
 	}
 	deleter_threads = 1;
 	pthread_mutex_unlock(_package->deleter_lock);
 
-	//printThreadInfo("Adder",_package->line+2,removeFromList(_package->list,_package->line+2,strlen(_package->line+2)),pthread_self());
 	success = removeFromList(_package->list,_package->line+2,strlen(_package->line+2));
 
 #ifdef __DEBUG
 	printf("Deleter %u: Done.\n",pthread_self());
 #endif
 	printThreadInfo("Deleter",_package->line+2,success,pthread_self());
+	
+	pthread_mutex_lock(_package->deleter_lock);
 	deleter_threads = 0;
-	pthread_cond_signal(_package->deleter_cond);
+	pthread_mutex_unlock(_package->deleter_lock);
+
+	pthread_cond_broadcast(_package->deleter_cond);
 	return NULL;
 }
 
@@ -316,7 +324,7 @@ int main(int argc , char** argv)
 					addToList(&thread_list,newThread,sizeof(pthread_t));
 					addToList(&package_list,adder_package,sizeof(adder_thread_package_t));
 #ifdef __DEBUG
-					printf("Spawning adder thread. Adding %s to the list.\n",line+2);
+					printf("Spawning adder thread. Adding %s to the list.\n",adder_package->line+2);
 #endif
 					pthread_create(newThread,NULL,adder,adder_package);
 					break;
@@ -335,11 +343,11 @@ int main(int argc , char** argv)
 					addToList(&thread_list,newThread,sizeof(pthread_t));
 					addToList(&package_list,deleter_package,sizeof(deleter_thread_package_t));
 #ifdef __DEBUG
-					printf("Spawning deleter thread. Deleting %s from the list.\n",line+2);
+					printf("Spawning deleter thread. Deleting %s from the list.\n",deleter_package->line+2);
 #endif
 					pthread_create(newThread,NULL,deleter,deleter_package);
 #ifdef __DEBUG
-					printf("Done deleting.\n",line+2);
+					printf("Done deleting.\n",deleter_package->line+2);
 #endif
 					break;
 				case 'R':
@@ -356,18 +364,18 @@ int main(int argc , char** argv)
 					addToList(&package_list,retriever_package,sizeof(retriever_thread_package_t));
 
 #ifdef __DEBUG
-					printf("Spawning retriever thread. Searching %s in the list.\n",line+2);
+					printf("Spawning retriever thread. Searching %s in the list.\n",retriever_package->line+2);
 #endif
 					pthread_create(newThread,NULL,retriever,retriever_package);
 #ifdef __DEBUG
-					printf("Done deleting.\n",line+2);
+					printf("Done deleting.\n",retriever_package->line+2);
 #endif
 					break;
 				case 'M':
 					next_thread_node = thread_list.begin;
 					next_package_node = package_list.begin;
 #ifdef __DEBUG
-					printf("Mark operation. Joining\n",line[2]);
+					printf("Mark operation. Joining\n");
 #endif
 					while (next_thread_node != NULL)
 					{
@@ -376,13 +384,7 @@ int main(int argc , char** argv)
 
 						curr_package_node = next_package_node;
 						next_package_node = next_package_node->next;
-/*#ifdef __DEBUG
-						printf("Waiting for thread %u...", *(pthread_t *)curr_thread_node->item);
-#endif*/
 						pthread_join(*(pthread_t *)curr_thread_node->item,NULL);
-/*#ifdef __DEBUG
-						printf("done.\n");
-#endif*/
 						removeFromList(&thread_list,curr_thread_node,sizeof(curr_thread_node));
 						removeFromList(&package_list,curr_package_node,sizeof(curr_package_node));
 						//TODO: destroy mutexes and conds
