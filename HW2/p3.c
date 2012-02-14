@@ -4,12 +4,13 @@
 #include <time.h>
 #include "util.h"
 #include <pthread.h>
+#include <math.h>
 
-#define MAX_THREADS 20
+#define MAX_THREADS 33
 #define NUM_THREADS 8
 #define MAX_PROCESSES 12
 
-struct threadPackage_t
+struct minerThreadPackage_t
 {
 	long startOffset;
 	long endOffset;
@@ -19,18 +20,44 @@ struct threadPackage_t
 	char *buffer;
 };
 
-void *threadFunc(void *threadPackage)
+struct reducerThreadPackage_t
+{
+	int **input,**output;
+	int myID,total,numProcesses;
+};
+
+void *reducerFunc(void *threadPackage)
+{
+	int i;
+	struct reducerThreadPackage_t *package;
+	package = (struct reducerThreadPackage_t *) threadPackage;
+
+	if (package->total > 1)
+	{
+		for (i = 0; i< package->numProcesses; i++)
+		{
+			if ( (package->myID * 2 + 1 ) <= package->total)
+			{
+				package->output[package->myID][i] = package->input[package->myID * 2][i] + package->input[package->myID * 2 + 1][i];
+				package->output[package->myID][package->numProcesses] = package->input[package->myID * 2][package->numProcesses] + package->input[package->myID * 2 + 1][package->numProcesses];
+			}
+		}
+	}
+	return NULL;
+}
+
+void *minerFunc(void *threadPackage)
 {
 	char **splitBuff;
 	int i,numTokens;
 
-	struct threadPackage_t *package;
+	struct minerThreadPackage_t *package;
 	char *tempBuff;
 
-	long start,end,curr;
+	long start,end,curr = 0;
 	int exitFlag = 0;
 
-	package = (struct threadPackage_t *) threadPackage; 
+	package = (struct minerThreadPackage_t *) threadPackage; 
 
 	start = package->startOffset;
 	end = package->endOffset;
@@ -90,10 +117,10 @@ void *threadFunc(void *threadPackage)
 			}
 			strncpy(tempBuff,(package->buffer)+ start,curr-start);
 		}
+		tempBuff[curr - start - 1] = '\0';
 		#ifdef __DEBUG
 		printf("\nReading %d --> %d (%s)",start,curr,tempBuff);
 		#endif
-		tempBuff[curr - start - 1] = '\0';
 		start = curr;
 		if (strlen(tempBuff) == 0)
 		{
@@ -106,10 +133,6 @@ void *threadFunc(void *threadPackage)
 			package->processCount[package->numProcesses]++;
 		}
 
-		#ifdef __DEBUG
-		//printf("\nTempBuff - %s",tempBuff);
-		#endif
-	
 		//TODO: Apparently, strtok_r is thread-safe only for dynamic mem. Check
 		numTokens = splitLine(tempBuff,splitBuff," :[]");
 		
@@ -138,9 +161,11 @@ void *threadFunc(void *threadPackage)
 		free(splitBuff[i]);
 	}
 	free(splitBuff);
+	free(tempBuff);
+	return NULL;
 }
 
-int adjustThreadOffsets(char *fileContents,int fileSize,long *offsetArray,int numThreads)
+void adjustThreadOffsets(char *fileContents,int fileSize,long *offsetArray,int numThreads)
 {
 	int i,blockSize;
 	long ptr = 0;
@@ -189,14 +214,18 @@ int main(int argc, char **argv)
 {
 	FILE *flog,*fproc;
 	char tempBuff[BUFFER_SIZE] = {'\0'};
-	int i = 0,j = 0,k = 0,numProcesses,totalLines = 0,fileSize;
+	int i = 0,j = 0,k = 0,l = 0,numProcesses,totalLines = 0,fileSize;
 	char *processList[MAX_PROCESSES];
-	int processCount[MAX_THREADS][MAX_PROCESSES];
+	int **processCount;
+	int **reducerProcessCount;
 	long offsetArray[MAX_THREADS];
+#ifndef _WIN32
 	struct timespec start_time,end_time;
+#endif
 	pthread_t threads[MAX_THREADS];
 	char *fileContents;
-	struct threadPackage_t threadPackage[MAX_THREADS];
+	struct minerThreadPackage_t threadPackage[MAX_THREADS];
+	struct reducerThreadPackage_t reducerThreadPackage[MAX_THREADS];
 	int printedOnce = 0,numThreads;
 
 
@@ -205,9 +234,9 @@ int main(int argc, char **argv)
 		printf("Incorrect usage!\nUsage - %s path-to-log-file path-to-process-list-file.\n",argv[0]);
 		return -1;
 	}
-
+#ifndef _WIN32
 	clock_gettime(CLOCK_MONOTONIC,&start_time);
-
+#endif
 	fproc = fopen(argv[2],"r");
 	if (fproc == NULL)
 	{
@@ -237,35 +266,33 @@ int main(int argc, char **argv)
 		fileSize = ftell(flog);
 	}
 
+	processCount = (int **) malloc (sizeof(int *) * MAX_THREADS);
+	reducerProcessCount = (int **) malloc (sizeof(int *) * MAX_THREADS);
+	for (i = 0; i < MAX_THREADS; i++)
+	{
+		reducerProcessCount[i] = (int *) malloc(sizeof(int) * numProcesses);
+		processCount[i] = (int *) malloc(sizeof(int) * numProcesses);
+	}
+
 	fileContents = (char *) malloc (sizeof(char) * fileSize);
 	rewind(flog);
 	fread(fileContents,1,fileSize,flog);
 	fclose(flog);
 
-	for (k = 1; (k * 2) <  16; k++)
+	for (k = 1; pow(2,k) <  33; k++)
 	{
-		numThreads = k * 2;
+		numThreads = pow(2,k);
 		for (i = 0; i <= numThreads; i++)
 		{
 			for (j = 0; j < MAX_PROCESSES; j++)
 			{
 				processCount[i][j] = 0;
+				reducerProcessCount[i][j] = 0;
 			}
+			processCount[i][numThreads] = 0;
 		}
 
 		adjustThreadOffsets(fileContents,fileSize,offsetArray,numThreads);
-
-		//Get the linecount
-		/*while ( fgets(tempBuff,1024,flog) > 0)
-		{
-			totalLines++;
-		}
-		threadLines = totalLines / NUM_THREADS;
-		offsetArray[0] = 0;
-		for ( i = 1; i < NUM_THREADS; i++)
-		{
-			offsetArray[i] = offsetArray[i - 1] + threadLines;
-		}*/
 
 		for (i = 0 ;i < numThreads; i++)
 		{
@@ -288,7 +315,7 @@ int main(int argc, char **argv)
 			printf("\nThreadPackage[%d] - \n",i);
 			printf("startOffset: %ld endOffset: %ld\n",threadPackage[i].startOffset,threadPackage[i].endOffset);
 			#endif
-			pthread_create(&threads[i],NULL,&threadFunc,&threadPackage[i]);
+			pthread_create(&threads[i],NULL,&minerFunc,&threadPackage[i]);
 		}
 
 		for (i = 0 ;i < numThreads; i++)
@@ -298,37 +325,77 @@ int main(int argc, char **argv)
 				printf("\nERROR: pthread_join returned non-zero!\n");
 			}
 		}
-
+#ifndef _WIN32
 		clock_gettime(CLOCK_MONOTONIC,&end_time);
+#endif
 		//blockSize: numOfThreads: totalCount: runningTime: 
 
-		//Now collate all the process counts received from each threads into one.
-		for (i = 0 ; i < numThreads; i++)
+		/*Now collate all the process counts received from each threads into one. */
+
+		totalLines = 0;
+		/*for (i = 0 ; i < numThreads; i++)
 		{
 			for (j = 0; j < MAX_PROCESSES; j++)
 			{
 				processCount[numThreads][j] += processCount[i][j];
 			}
 			totalLines += processCount[i][numProcesses];
-		}
+		}*/
 
+		for (i = numThreads / 2; i >= 1; i = i / 2)
+		{
+
+#ifdef __DEBUG
+			printf("\nReducer threads - %d",i);
+#endif
+			for (j = 0; j < i; j++)
+			{
+				reducerThreadPackage[j].input = processCount;
+				reducerThreadPackage[j].output = reducerProcessCount;
+				reducerThreadPackage[j].numProcesses = numProcesses;
+				reducerThreadPackage[j].myID = j;
+				reducerThreadPackage[j].total = numThreads;
+				pthread_create(&threads[j],NULL,&reducerFunc,&reducerThreadPackage[j]);
+			}
+
+			for (j = 0; j < i; j++)
+			{
+				if (pthread_join(threads[j],NULL) != 0)
+				{
+					printf("\nERROR: pthread_join(%d) returned non-zero! (reducer)\n",j);
+				}
+			}
+			//TODO: Replace with a far faster memcpy()
+			for (j = 0; j < i; j++)
+			{
+				for (l = 0; l <= numProcesses; l++)
+				{
+					processCount[j][l] = reducerProcessCount[j][l];
+					reducerProcessCount[j][l] = 0;
+				}
+			}
+
+		}
+		totalLines = processCount[0][numProcesses];
 		if (printedOnce == 0)
 		{
 			for(i = 0; i < numProcesses;i++)
 			{
-				printf("\npName:%s count:%d",processList[i],processCount[numThreads][i]);
+				printf("\npName:%s count:%d",processList[i],processCount[0][i]);
 			}
 			printf("\nTotal Number of loglines: %d\n",totalLines);
 			printedOnce = 1;
 		}
-		//printf("\nNow %d\n",numThreads);
+#ifndef _WIN32
 		printf("\n%d: %d: %d: %lfms: \n",fileSize/numThreads,numThreads,totalLines,(end_time.tv_sec - start_time.tv_sec) +  (end_time.tv_nsec - start_time.tv_nsec)/1000000.0);
+#else
+		printf("\n%d: %d: %d \n",fileSize/numThreads,numThreads,totalLines);
+#endif
 	}
-	//Be a good boy and release all the memory
-	for (i = 0; i < numProcesses; i++)
-	{
-		free(processList[i]);
-	}
+
+	free(processCount);
+	free(reducerProcessCount);
+	free(fileContents);
 	return 0;
 
 }
