@@ -1,0 +1,6 @@
+# Readme for HW2 - Problem 4
+# Vineet Krishnan - vineet@ncsu.edu
+
+The reduction technique is a tree-based reduction technique.
+The reduction happens in ln (n) steps, with the number of threads halved at each step.
+This technique does not need any synchronization between threads in a block.
