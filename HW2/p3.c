@@ -1,10 +1,16 @@
+/* HW2 Problem 3 - Spring 2012
+Author - Vineet Krishnan
+vineet@ncsu.edu */
+
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
-#include "util.h"
 #include <pthread.h>
 #include <math.h>
+
+#include "util.h"
 
 #define MAX_THREADS 33
 #define NUM_THREADS 8
@@ -26,6 +32,8 @@ struct reducerThreadPackage_t
 	int myID,total,numProcesses;
 };
 
+//The reducer function reduces values in a tree based manner.
+//The reducer should be called ln (n) times.
 void *reducerFunc(void *threadPackage)
 {
 	int i;
@@ -76,20 +84,11 @@ void *minerFunc(void *threadPackage)
 		splitBuff[i] = (char *) malloc ( MAX_WORD_LENGTH * sizeof(char));
 	}
 
-	//Read the input data between the offsets char-by-char
 	while (exitFlag == 0)
 	{
-		/*while (package->buffer[start] != '\n')
-		{
-			start++;
-			if (package->buffer[start] == '\0')
-			{
-				exitFlag = 1;
-				break;
-			}
-		}*/
 		start++;
 		curr = start + 1;
+		//Read the input line by line. And for that, align curr to a line boundary.
 		if (end != -1)
 		{
 			while (package->buffer[curr] != '\n' && curr < end)
@@ -117,6 +116,8 @@ void *minerFunc(void *threadPackage)
 			}
 			strncpy(tempBuff,(package->buffer)+ start,curr-start);
 		}
+
+		//We now have a full line. Let the games begin.
 		tempBuff[curr - start - 1] = '\0';
 		#ifdef __DEBUG
 		printf("\nReading %d --> %d (%s)",start,curr,tempBuff);
@@ -130,10 +131,10 @@ void *minerFunc(void *threadPackage)
 		}
 		else
 		{
+			//The total linecount is stored in package->processCount[package->numProcesses]
 			package->processCount[package->numProcesses]++;
 		}
 
-		//TODO: Apparently, strtok_r is thread-safe only for dynamic mem. Check
 		numTokens = splitLine(tempBuff,splitBuff," :[]");
 		
 		//Check if the current logLine is written by a process we're interested in.
@@ -143,11 +144,6 @@ void *minerFunc(void *threadPackage)
 			{
 				package->processCount[i]++;
 			}
-			//for (i = 0; i < numTokens; i++)
-			//{
-			//	printf("\t%d: %s",i,splitBuff[i]);
-			//}
-			//(package->*totalLines)++;
 		}
 		else
 		{
@@ -186,6 +182,7 @@ void adjustThreadOffsets(char *fileContents,int fileSize,long *offsetArray,int n
 		{
 			offsetArray[i] = -1;
 		}
+		//TODO:fix valgrinds complaining here.
 		while ( fileContents[ptr] != '\n' && fileContents[ptr] != '\0')
 		{
 			ptr++;
@@ -219,9 +216,11 @@ int main(int argc, char **argv)
 	int **processCount;
 	int **reducerProcessCount;
 	long offsetArray[MAX_THREADS];
+
 #ifndef _WIN32
 	struct timeval start_time,end_time;
 #endif
+
 	pthread_t threads[MAX_THREADS];
 	char *fileContents;
 	struct minerThreadPackage_t threadPackage[MAX_THREADS];
@@ -260,6 +259,7 @@ int main(int argc, char **argv)
 		printf("\nError opening logfile!\n");
 		return -1;
 	}
+	
 	//Get the total byte size of the file.
 	if (fseek(flog,0,SEEK_END) == 0)
 	{
@@ -279,6 +279,7 @@ int main(int argc, char **argv)
 	fread(fileContents,1,fileSize,flog);
 	fclose(flog);
 
+	//Run ffor threads which are powers of two.
 	for (k = 1; pow(2,k) <  33; k++)
 	{
 		numThreads = pow(2,k);
@@ -340,6 +341,7 @@ int main(int argc, char **argv)
 			totalLines += processCount[i][numProcesses];
 		}*/
 
+		//Reduce the count in ln(n) steps.
 		for (i = numThreads / 2; i >= 1; i = i / 2)
 		{
 
@@ -391,6 +393,7 @@ int main(int argc, char **argv)
 #endif
 	}
 
+	//Be a good boy and free all the memory.
 	for (i = 0; i < MAX_THREADS; i++)
 	{
 		free(processCount[i]);

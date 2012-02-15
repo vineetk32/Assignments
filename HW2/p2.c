@@ -115,10 +115,18 @@ int searchList(List_t *list,char *item,size_t bytes){
 }
 
 void printThreadInfo(char* operation, char* value, int success, pthread_t tid){
+
+#ifndef _WIN32
+	if(success == 0)
+		printf("[%08x]    Success %s [ %s ] Retrievers : %i Adders : %i Deleters : %i\n",tid ,operation,value,retriever_threads,adder_threads,deleter_threads);
+	else
+		printf("[%08x]    Fail %s [ %s ] Retrievers : %i Adders : %i Deleters : %i\n",tid , operation,value,retriever_threads,adder_threads,deleter_threads);
+#else
 	if(success == 0)
 		printf("Success %s [ %s ] Retrievers : %i Adders : %i Deleters : %i\n",operation,value,retriever_threads,adder_threads,deleter_threads);
 	else
-		printf("Fail %s [ %s ] Retrievers : %i Adders : %i Deleters : %i\n" , operation,value,retriever_threads,adder_threads,deleter_threads);
+		printf("Fail %s [ %s ] Retrievers : %i Adders : %i Deleters : %i\n", operation,value,retriever_threads,adder_threads,deleter_threads);
+#endif
 
 }
 
@@ -131,6 +139,7 @@ void *adder(void *package)
 	_package = (adder_thread_package_t *) package;
 
 	pthread_mutex_lock(_package->deleter_lock);
+	//Wait for deleters and other adders to get done.
 	while (deleter_threads == 1)
 	{
 
@@ -177,6 +186,8 @@ void *retriever(void *package)
 	_package = (retriever_thread_package_t *) package;
 
 	pthread_mutex_lock(_package->deleter_lock);
+
+	//Retriever should wait until the deleter is done.
 	while (deleter_threads == 1)
 	{
 #ifdef __DEBUG
@@ -201,6 +212,7 @@ void *retriever(void *package)
 	retriever_threads--;
 	pthread_mutex_unlock(_package->retriever_lock);
 
+	//Signal to any deleter(s) that might be waiting.
 	pthread_cond_broadcast(_package->retriever_cond);
 	return NULL;
 }
@@ -215,6 +227,8 @@ void *deleter(void *package)
 	
 	//TODO: Not the right way. Fix this.
 	pthread_mutex_lock(_package->adder_lock);
+
+	//The deleter needs to wait for everyone to finish.
 	while (adder_threads == 1)
 	{
 		pthread_cond_wait(_package->adder_cond,_package->adder_lock);
@@ -346,11 +360,13 @@ int main(int argc , char** argv)
 			adder_package = NULL;
 			deleter_package = NULL;
 
+			//Read the input line by line, get the first char, and decide the operation.
 			if (strlen(line) > 1)
 			{
 				line[strlen(line) - 1] = '\0';
 				switch(line[0])
 				{
+				
 				case 'A':
 					newThread = (pthread_t *) malloc(sizeof(pthread_t));
 					adder_package = (adder_thread_package_t *) malloc(sizeof(adder_thread_package_t));
