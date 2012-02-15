@@ -139,7 +139,7 @@ void *minerFunc(void *threadPackage)
 		//Check if the current logLine is written by a process we're interested in.
 		if (numTokens > 5)
 		{
-			if ( (i = arrayContains(package->processList,splitBuff[5],package->numProcesses)) > 0)
+			if ( (i = arrayContains(package->processList,splitBuff[5],package->numProcesses)) >= 0)
 			{
 				package->processCount[i]++;
 			}
@@ -220,7 +220,7 @@ int main(int argc, char **argv)
 	int **reducerProcessCount;
 	long offsetArray[MAX_THREADS];
 #ifndef _WIN32
-	struct timespec start_time,end_time;
+	struct timeval start_time,end_time;
 #endif
 	pthread_t threads[MAX_THREADS];
 	char *fileContents;
@@ -235,7 +235,7 @@ int main(int argc, char **argv)
 		return -1;
 	}
 #ifndef _WIN32
-	clock_gettime(CLOCK_MONOTONIC,&start_time);
+	gettimeofday(&start_time,NULL);
 #endif
 	fproc = fopen(argv[2],"r");
 	if (fproc == NULL)
@@ -270,8 +270,8 @@ int main(int argc, char **argv)
 	reducerProcessCount = (int **) malloc (sizeof(int *) * MAX_THREADS);
 	for (i = 0; i < MAX_THREADS; i++)
 	{
-		reducerProcessCount[i] = (int *) malloc(sizeof(int) * numProcesses);
-		processCount[i] = (int *) malloc(sizeof(int) * numProcesses);
+		reducerProcessCount[i] = (int *) malloc(sizeof(int) * (numProcesses + 1));
+		processCount[i] = (int *) malloc(sizeof(int) * (numProcesses + 1));
 	}
 
 	fileContents = (char *) malloc (sizeof(char) * fileSize);
@@ -282,14 +282,13 @@ int main(int argc, char **argv)
 	for (k = 1; pow(2,k) <  33; k++)
 	{
 		numThreads = pow(2,k);
-		for (i = 0; i <= numThreads; i++)
+		for (i = 0; i < numThreads; i++)
 		{
-			for (j = 0; j < MAX_PROCESSES; j++)
+			for (j = 0; j <= numProcesses; j++)
 			{
 				processCount[i][j] = 0;
 				reducerProcessCount[i][j] = 0;
 			}
-			processCount[i][numThreads] = 0;
 		}
 
 		adjustThreadOffsets(fileContents,fileSize,offsetArray,numThreads);
@@ -326,13 +325,12 @@ int main(int argc, char **argv)
 			}
 		}
 #ifndef _WIN32
-		clock_gettime(CLOCK_MONOTONIC,&end_time);
+		gettimeofday(&end_time,NULL);
 #endif
 		//blockSize: numOfThreads: totalCount: runningTime: 
 
 		/*Now collate all the process counts received from each threads into one. */
 
-		totalLines = 0;
 		/*for (i = 0 ; i < numThreads; i++)
 		{
 			for (j = 0; j < MAX_PROCESSES; j++)
@@ -374,11 +372,11 @@ int main(int argc, char **argv)
 					reducerProcessCount[j][l] = 0;
 				}
 			}
-
 		}
-		totalLines = processCount[0][numProcesses];
+
 		if (printedOnce == 0)
 		{
+			totalLines = processCount[0][numProcesses];
 			for(i = 0; i < numProcesses;i++)
 			{
 				printf("\npName:%s count:%d",processList[i],processCount[0][i]);
@@ -387,12 +385,17 @@ int main(int argc, char **argv)
 			printedOnce = 1;
 		}
 #ifndef _WIN32
-		printf("\n%d: %d: %d: %lfms: \n",fileSize/numThreads,numThreads,totalLines,(end_time.tv_sec - start_time.tv_sec) +  (end_time.tv_nsec - start_time.tv_nsec)/1000000.0);
+		printf("\n%d: %d: %d: %dus: \n",fileSize/numThreads,numThreads,totalLines,(end_time.tv_sec*1000000 - start_time.tv_sec*1000000) +  (end_time.tv_usec - start_time.tv_usec));
 #else
 		printf("\n%d: %d: %d \n",fileSize/numThreads,numThreads,totalLines);
 #endif
 	}
 
+	for (i = 0; i < MAX_THREADS; i++)
+	{
+		free(processCount[i]);
+		free(reducerProcessCount[i]);
+	}
 	free(processCount);
 	free(reducerProcessCount);
 	free(fileContents);

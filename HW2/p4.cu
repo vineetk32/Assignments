@@ -1,13 +1,13 @@
 /*
-	CSC501 - Operating System - Spring 2012 - North Carolina State University
-	
-	HomeWork2 Prob4. See - http://courses.ncsu.edu/csc501/lec/001/hw/hw2/
-	Author: Salil Kanitkar (sskanitk@ncsu.edu)
+CSC501 - Operating System - Spring 2012 - North Carolina State University
 
-	For Compiling - 
-	$ make clean ; make a4
-	For Executing -
-	$ ./a4 <path-to-log-file> <path-to-process-list-file>
+HomeWork2 Prob4. See - http://courses.ncsu.edu/csc501/lec/001/hw/hw2/
+Author: Salil Kanitkar (sskanitk@ncsu.edu)
+
+For Compiling - 
+$ make clean ; make a4
+For Executing -
+$ ./a4 <path-to-log-file> <path-to-process-list-file>
 */
 
 #include<stdio.h>
@@ -15,16 +15,17 @@
 #include<string.h>
 #include <cuda_runtime.h>
 #include<sys/types.h>
+#include <math.h>
 
 #ifndef _WIN32
 #include<sys/time.h>
 #endif
 
 /* Uncomment the below line to enable debug prints 
- */
+*/
 //#define VERBOSE 1
 
-#define MAX_LOGFILE_SIZE 1501000
+#define MAX_LOGFILE_SIZE (1<<20)
 #define MAX_LOGLINE_SIZE 100
 #define MAX_PROC_NUM 10
 #define MAX_PNAME_LEN 50
@@ -46,19 +47,19 @@ typedef struct _stats_entry_t {
 /* CUDA device local func for string copy. */
 __device__ void dev_mystrcpy(char *t, char *s)
 {
-        while ( *s != '\0' ) {
-                *t++ = *s++;
-        }
-        *t = '\0';
+	while ( *s != '\0' ) {
+		*t++ = *s++;
+	}
+	*t = '\0';
 }
 
 /* CUDA device local func for getting string length. */
 __device__ int dev_my_strlen(char *src)
 {
-        int len=0;
-        while ( *src++ != '\0' )
-                len++;
-        return (len);
+	int len=0;
+	while ( *src++ != '\0' )
+		len++;
+	return (len);
 }
 
 /* CUDA device func for comparing strings. */
@@ -66,7 +67,7 @@ __device__ int dev_my_strcmp(char *s, char *d)
 {
 	int len = dev_my_strlen(s), tmplen = dev_my_strlen(d);
 	int i=0;
-	
+
 	if (len != tmplen)
 		return 1;
 
@@ -75,15 +76,15 @@ __device__ int dev_my_strcmp(char *s, char *d)
 			return 1;
 		i += 1;
 	}
-	
+
 	return 0;	
 }
 
 /* The global kernel func. 
-   For the block that a thread is supposed to work with, the below function will calculate the results and populate the corresponding cell
-   in the dev_stats memory array.
+For the block that a thread is supposed to work with, the below function will calculate the results and populate the corresponding cell
+in the dev_stats memory array.
 */
-__global__ void dev_calc_stats(char *dev_fileBuf, int *dev_blockStart, int *dev_blockEnd, int numProcs, stats_entry_t *dev_stats)
+__global__ void dev_calc_stats(char *dev_fileBuf, int *dev_blockStart, int *dev_blockEnd, int numProcs, stats_entry_t *dev_stats, int paddedFileSize, int fileSize)
 {
 	int idx = blockIdx.x*blockDim.x + threadIdx.x;
 	int i=0, j=0, k=0, bufSize;
@@ -92,7 +93,10 @@ __global__ void dev_calc_stats(char *dev_fileBuf, int *dev_blockStart, int *dev_
 	dev_mystrcpy(logline, "");
 	dev_mystrcpy(tmp, "");
 
-	for (i=dev_blockStart[idx] ; i <= dev_blockEnd[idx] ; i++) {
+	if (dev_blockStart[idx] > fileSize || dev_blockEnd[idx] > paddedFileSize || dev_blockStart[idx] >= dev_blockEnd[idx])
+		return;
+
+	for (i=dev_blockStart[idx] ; i <= paddedFileSize && i <= dev_blockEnd[idx] ; i++) {
 		buf[j++] = dev_fileBuf[i];
 	}
 	buf[j] = '\0';
@@ -100,11 +104,15 @@ __global__ void dev_calc_stats(char *dev_fileBuf, int *dev_blockStart, int *dev_
 	
 	i = 0; j = 0;
 	for (i=0 ; i < bufSize ; i++) {
-		logline[j] = buf[i];
 		if (buf[i] == '\n') {
-			logline[j] = '\0';
+			if (j <= MAX_LOGLINE_SIZE)
+				logline[j] = '\0';
+			else {
+				j = 0;
+				continue;
+			}
 			k = 0;
-			while (logline[k+16] != '[') {
+			while (k+16 < 100 && logline[k+16] != '[') {
 				tmp[k] = logline[k+16];
 				k += 1;
 			}
@@ -115,11 +123,38 @@ __global__ void dev_calc_stats(char *dev_fileBuf, int *dev_blockStart, int *dev_
 			}
 			j = 0;
 		}
-		else 
+		else {
+			if (j < MAX_LOGLINE_SIZE)
+				logline[j] = buf[i];
 			j += 1;
+		}
 	}
 
 }
+
+__global__ void reducerFunc(stats_entry_t *input_stats,stats_entry_t *output_stats,int numProcesses,int totalThreads)
+{
+	int j = 0;
+	unsigned int myID = blockIdx.x*blockDim.x + threadIdx.x;
+	//extern __shared__ stats_entry_t shared_stats[][];
+
+	/*for (j = 0; i < numProcesses; j++)
+	{
+		shared_stats[tid].proclist[j].count = input_stats[i].proclist[j].count;
+	}
+	
+	__syncthreads();*/
+
+	// do reduction in shared mem
+	if (totalThreads > 1 && (myID *2 + 1) < totalThreads)
+	{
+		for (j = 0; j < numProcesses; j++)
+		{
+			output_stats[myID].proclist[j].count = input_stats[2*myID].proclist[j].count + input_stats[2*myID + 1].proclist[j].count;
+		}
+	}
+}
+
 
 int main(int argc, char *argv[])
 {
@@ -129,14 +164,15 @@ int main(int argc, char *argv[])
 	int numThreads=0, numBlocks=0, numThreadsPerBlock=0,  paddedFileSize=0, blockSize=0;
 	long fileSize = 0,i = 0;
 	int *blockStart=0, *blockEnd=0;
-	int numProcs, count, tot_count, pflag=0;
-	int j, k, start;
+	int numProcs, count, tot_count, pflag=0,done = 0;
+	int reducerBlocks, reducerThreadsPerBlock;
+	int j, k, start,blockLoop,threadLoop;
 	stats_entry_t *stats=0;
 	char *pname, proclist[MAX_PROC_NUM][MAX_PNAME_LEN];
 
 	char *dev_fileBuf;
 	int *dev_blockStart, *dev_blockEnd;
-	stats_entry_t *dev_stats;
+	stats_entry_t *dev_stats,*dev_reducer_stats;
 
 #ifndef _WIN32
 	struct timeval t_start, t_end;
@@ -164,14 +200,12 @@ int main(int argc, char *argv[])
 	for (i=0 ; !feof(fp_proclist) ; ) {
 		i += fread(&(procBuf[i]), 1, 1, fp_proclist);
 	}
-	procBuf[i] = '\0';
+
 	/* Read up the entire logfile in a local buffer in memory. */
 	i = 0;
 	for (i=0 ; !feof(fp_logfile) ; ) {
 		i += fread(&(fileBuf[i]), 1, 1, fp_logfile);
 	}
-	fileBuf[i] = '\0';
-
 	fileSize = i;
 
 #ifdef VERBOSE
@@ -195,39 +229,61 @@ int main(int argc, char *argv[])
 	}
 #endif
 
+	if (fileSize < 65536) {
+		cudaMalloc((void **)&dev_fileBuf, sizeof(char)*MAX_LOGFILE_SIZE);
+		cudaMemset((void *)dev_fileBuf, 0, sizeof(char)*MAX_LOGFILE_SIZE);
 
-	/* Allocate on the CUDA device global memory. Initialize all allocated memory to zero. 
-	   For each run, we will not allocate the memory again on the device but will cudaMemset it to zero and then use.
-	*/
-	cudaMalloc((void **)&dev_fileBuf, sizeof(char)*MAX_LOGFILE_SIZE);
-	cudaMemset((void *)dev_fileBuf, 0, sizeof(char)*MAX_LOGFILE_SIZE);
+		cudaMalloc((void **)&dev_blockStart, sizeof(int)*MAX_NUM_THREADS);
+		cudaMemset((void *)dev_blockStart, 0, sizeof(int)*MAX_NUM_THREADS);
 
-	cudaMalloc((void **)&dev_blockStart, sizeof(int)*MAX_NUM_THREADS);
-	cudaMemset((void *)dev_blockStart, 0, sizeof(int)*MAX_NUM_THREADS);
+		cudaMalloc((void **)&dev_blockEnd, sizeof(int)*MAX_NUM_THREADS);
+		cudaMemset((void *)dev_blockEnd, 0, sizeof(int)*MAX_NUM_THREADS);
 
-	cudaMalloc((void **)&dev_blockEnd, sizeof(int)*MAX_NUM_THREADS);
-	cudaMemset((void *)dev_blockEnd, 0, sizeof(int)*MAX_NUM_THREADS);
+		cudaMalloc((void **)&dev_stats, sizeof(stats_entry_t)*MAX_NUM_THREADS);
+		cudaMemset((void *)dev_stats, 0, sizeof(stats_entry_t)*MAX_NUM_THREADS);
 
-	cudaMalloc((void **)&dev_stats, sizeof(stats_entry_t)*MAX_NUM_THREADS);
-	cudaMemset((void *)dev_stats, 0, sizeof(stats_entry_t)*MAX_NUM_THREADS);
+		cudaMalloc((void **)&dev_reducer_stats, sizeof(stats_entry_t)*MAX_NUM_THREADS);
+		cudaMemset((void *)dev_reducer_stats, 0, sizeof(stats_entry_t)*MAX_NUM_THREADS);
 
-	blockStart = (int *)malloc(sizeof(int)*MAX_NUM_THREADS);
-	blockEnd = (int *)malloc(sizeof(int)*MAX_NUM_THREADS);
+		blockStart = (int *)malloc(sizeof(int)*MAX_NUM_THREADS);
+		blockEnd = (int *)malloc(sizeof(int)*MAX_NUM_THREADS);
 
-	stats = (stats_entry_t *)malloc(sizeof(stats_entry_t)*(MAX_NUM_THREADS));
+		stats = (stats_entry_t *)malloc(sizeof(stats_entry_t)*(MAX_NUM_THREADS));
+	}
 
-	/* Vary the number of blocks by a certain offset. */
-	for (numBlocks=1 ; numBlocks < MAX_NUM_BLOCKS ; numBlocks += 8) {
+	for (blockLoop = 1; pow((float)2,blockLoop) <  MAX_NUM_BLOCKS; blockLoop++)
+	{
+		numBlocks = pow((float)2,blockLoop);
 
 		/* Vary the number of threads per block by some offset. */
-		for (numThreadsPerBlock=4 ; numThreadsPerBlock < MAX_THREADS_PER_BLOCK ; numThreadsPerBlock += 16) {
-			//numBlocks = 1 ; numThreadsPerBlock = 5;
+		for (threadLoop = 1; pow((float)2,threadLoop) <  MAX_THREADS_PER_BLOCK; threadLoop++)
+		{
+			numThreadsPerBlock = pow((float)2,threadLoop);
+
+			//numBlocks = 25 ; numThreadsPerBlock = 324;
 			/* The actual number of threads to be used for this run of the program. */
 			numThreads = numBlocks * numThreadsPerBlock;
 
-			memset(blockStart, 0, sizeof(int)*MAX_NUM_THREADS);
-			memset(blockEnd, 0, sizeof(int)*MAX_NUM_THREADS);
-			memset(stats, 0, sizeof(stats_entry_t)*(MAX_NUM_THREADS));
+			if (fileSize > 65535) {
+				blockStart = (int *)malloc(sizeof(int)*MAX_NUM_THREADS);
+				blockEnd = (int *)malloc(sizeof(int)*MAX_NUM_THREADS);
+				stats = (stats_entry_t *)malloc(sizeof(stats_entry_t)*(MAX_NUM_THREADS));
+			}
+
+			for (i=0 ; i < MAX_NUM_THREADS ; i++) {
+				blockStart[i] = 0;
+			}
+
+			for (i=0 ; i < MAX_NUM_THREADS ; i++) {
+				blockEnd[i] = 0;
+			}
+
+			for (i=0 ; i < MAX_NUM_THREADS ; i++)  {
+				for (j=0 ; j < numProcs ; j++) {
+					strcpy(stats[i].proclist[j].pname, "");
+					stats[i].proclist[j].count = 0;
+				}
+			}
 
 			for (i=0 ; i < numThreads ; i++) {
 				for (j=0 ; j < numProcs ; j++) {
@@ -239,46 +295,58 @@ int main(int argc, char *argv[])
 			/* Do padding etc. Adjust the length. */
 			paddedFileSize = fileSize;
 			blockSize = (int)fileSize/numThreads;
-	
+
 			if ( fileSize%numThreads != 0 ) {
 				paddedFileSize = fileSize + (numThreads - (fileSize%numThreads));
 				blockSize = (int)paddedFileSize/numThreads;
 				memset(&(fileBuf[fileSize]), 0, paddedFileSize - fileSize);
 			}
 
-			if (blockSize < 20 || blockSize > 10000) { ;
-				/* If the blockSize falls below 20, then no single block can contain any process name. So skip this invocation. 
-				   Uncomment the below line to display the corresponding message in the program output.
-				*/
-				/* printf("blockSize:%d numThreads:%d - No legal processing possible for this configuration.!\n", blockSize, numThreads);*/
-				continue;
+			if (blockSize < 20 || blockSize >= 10000) { ;
+			/* If the blockSize falls below 20, then no single block can contain any process name. So skip this invocation. 
+			Uncomment the below line to display the corresponding message in the program output.
+			*/
+			/* printf("blockSize:%d numThreads:%d - No legal processing possible for this configuration.!\n", blockSize, numThreads);*/
+			continue;
 			}
 #ifdef VERBOSE
 			printf("LogFile:\n%s\n", fileBuf);
 
 			printf("fileSize:%d paddedFileSize:%d blockSize:%d\n\n", fileSize, paddedFileSize, blockSize);
 #endif
-			
+
+			int x; 
+			//int activeThreads;
 			/* Build up blockStart and blockEnd arrays. They will keep track of start and end of every block for this run. */
 			for (i=0, k=0, start=0 ; i < numThreads; i++, j++) {
 
 				blockStart[i] = start;
 				k = 0;
-	
+
 				if (start+blockSize >= paddedFileSize) {
 					blockEnd[i] = paddedFileSize;
+					//activeThreads = i;
+					for (x = i+1 ; x < numThreads ; x++) {
+						blockStart[x] = paddedFileSize;
+						blockEnd[x] = paddedFileSize;
+					}
 					break;
 				}
-	
+
 				if (fileBuf[(start+blockSize)] != '\n') {
 					k = 1;
-					while (((start+blockSize+k) <= paddedFileSize) && fileBuf[(start+blockSize)+k] != '\n')
+					while (((start+blockSize+k) <= paddedFileSize) && (fileBuf[start+blockSize+k] != '\n'))
 						k += 1;
+					blockEnd[i] = start + blockSize + k;
+				} else {
+					blockEnd[i] = start + blockSize;
 				}
-				blockEnd[i] = (start+blockSize) + k;
-	
-				if ((start+blockSize+k+1) <= paddedFileSize)
-					start = (start+blockSize) + k + 1;
+
+				if (blockEnd[i] > paddedFileSize)
+					blockEnd[i] = paddedFileSize;
+
+				if ((blockEnd[i]+1) <= paddedFileSize)
+					start = blockEnd[i] + 1;
 				else
 					start = paddedFileSize;
 			}
@@ -288,7 +356,7 @@ int main(int argc, char *argv[])
 			for (i=0 ; i < numThreads ; i++) {
 				printf("Block %d\n", i);
 				printf("blockStart:%d blockEnd:%d\n", blockStart[i], blockEnd[i]);
-				for (j=blockStart[i] ; j<blockEnd[i] ; j++) {
+				for (j=blockStart[i] ; j<blockEnd[i] ; j++) { ;
 					printf("%c", fileBuf[j]);
 				}
 				printf("\nStats:\n");
@@ -298,7 +366,25 @@ int main(int argc, char *argv[])
 				printf("\n\n");
 			}
 #endif
-	
+
+			if (fileSize > 65536) {
+				cudaMalloc((void **)&dev_fileBuf, sizeof(char)*MAX_LOGFILE_SIZE);
+				cudaMemset((void *)dev_fileBuf, 0, sizeof(char)*MAX_LOGFILE_SIZE);
+
+				cudaMalloc((void **)&dev_blockStart, sizeof(int)*MAX_NUM_THREADS);
+				cudaMemset((void *)dev_blockStart, 0, sizeof(int)*MAX_NUM_THREADS);
+
+				cudaMalloc((void **)&dev_blockEnd, sizeof(int)*MAX_NUM_THREADS);
+				cudaMemset((void *)dev_blockEnd, 0, sizeof(int)*MAX_NUM_THREADS);
+
+				cudaMalloc((void **)&dev_stats, sizeof(stats_entry_t)*MAX_NUM_THREADS);
+				cudaMemset((void *)dev_stats, 0, sizeof(stats_entry_t)*MAX_NUM_THREADS);
+
+				cudaMalloc((void **)&dev_reducer_stats, sizeof(stats_entry_t)*MAX_NUM_THREADS);
+				cudaMemset((void *)dev_reducer_stats, 0, sizeof(stats_entry_t)*MAX_NUM_THREADS);
+
+			}
+
 			cudaEventCreate(&dev_t_start);
 			cudaEventCreate(&dev_t_end);
 			cudaThreadSynchronize();
@@ -313,7 +399,7 @@ int main(int argc, char *argv[])
 
 			cudaEventRecord(dev_t_start, 0);
 
-			dev_calc_stats <<< numBlocks, numThreadsPerBlock >>> (dev_fileBuf, dev_blockStart, dev_blockEnd, numProcs, dev_stats);
+			dev_calc_stats <<< numBlocks, numThreadsPerBlock >>> (dev_fileBuf, dev_blockStart, dev_blockEnd, numProcs, dev_stats, paddedFileSize, fileSize);
 
 			cudaEventRecord(dev_t_end, 0);
 
@@ -323,8 +409,8 @@ int main(int argc, char *argv[])
 			cudaEventDestroy(dev_t_end);
 			cudaThreadSynchronize();
 
-			cudaMemcpy(stats, dev_stats, sizeof(stats_entry_t)*numThreads, cudaMemcpyDeviceToHost);
-	
+			//cudaMemcpy(stats, dev_stats, sizeof(stats_entry_t)*numThreads, cudaMemcpyDeviceToHost);
+
 #ifdef VERBOSE
 	        	printf("Final Data as follows:\n");
 		        for (i=0 ; i < numThreads ; i++) {
@@ -340,9 +426,50 @@ int main(int argc, char *argv[])
 	                	printf("\n\n");
 	        	}
 #endif
+			done = 0;
+			reducerBlocks = numBlocks;
+			reducerThreadsPerBlock = numThreadsPerBlock;
+			cudaMemcpy(dev_reducer_stats, dev_stats, sizeof(stats_entry_t)*numThreads, cudaMemcpyDeviceToDevice);
+			while (done == 0)
+			{
 
+				cudaMemcpy(stats, dev_stats, sizeof(stats_entry_t)*numThreads, cudaMemcpyDeviceToHost);
+
+				/*for (i=0 ; i < numThreads ; i++) {
+					printf("\nBefore Reduction: Thread %d - ",i);
+					for (j=0 ; j < numProcs ; j++) { 
+						printf("%s %d\n", stats[i].proclist[j].pname, stats[i].proclist[j].count);
+					}
+				}*/
+
+				if (reducerThreadsPerBlock == 1)
+				{
+					reducerBlocks = reducerBlocks / 2;
+				}
+				else
+				{
+					reducerThreadsPerBlock = reducerThreadsPerBlock / 2;
+				}
+				if (reducerThreadsPerBlock == 1 && reducerBlocks == 1)
+				{
+					done = 1;
+				}
+				//printf("Reducing %d,%d\n",reducerBlocks,reducerThreadsPerBlock);
+
+				reducerFunc <<< reducerBlocks,reducerThreadsPerBlock >>> (dev_stats,dev_reducer_stats,numProcs,numBlocks * numThreadsPerBlock);
+
+				cudaMemcpy(dev_stats, dev_reducer_stats, sizeof(stats_entry_t)*numThreads, cudaMemcpyDeviceToDevice);
+			}
+			
+			cudaMemcpy(stats, dev_stats, sizeof(stats_entry_t)*numThreads, cudaMemcpyDeviceToHost);
+			/*for (i=0 ; i < numThreads ; i++) {
+				printf("\nAfter Reduction Thread %d - ",i);
+				for (j=0 ; j < numProcs ; j++) { 
+					printf("%s %d\n", stats[i].proclist[j].pname, stats[i].proclist[j].count);
+				}
+			}*/
 			/* Aggregate the results calculated by each block. 
-			*/
+			
 			tot_count = 0;
 			for (j=0 ; j < numProcs ; j++) {
 				count = 0;
@@ -355,10 +482,22 @@ int main(int argc, char *argv[])
 			}
 
 			if (!pflag)
+				printf("Total Number of loglines: %d\n", tot_count);*/
+
+			tot_count = 0;
+			for (j=0 ; j < numProcs ; j++) {
+
+				if (!pflag)
+					printf("pName: %s count: %d\n", stats[0].proclist[j].pname, stats[0].proclist[j].count);
+				tot_count += stats[0].proclist[j].count;
+			}
+
+			if (!pflag)
 				printf("Total Number of loglines: %d\n", tot_count);
+
 #ifndef _WIN32
 			gettimeofday(&t_end, NULL);
-			printf("blockSize:%d numThreads:%d totalCount:%d CPUTime:%8ld GPUTime:%f\n", blockSize, numThreads, tot_count, t_end.tv_usec - t_start.tv_usec + (t_end.tv_sec*1000000 - t_start.tv_sec*1000000),time_elapsed);
+			printf("blockSize:%d numThreads:%d totalCount:%d CPUTime:%8ld GPUTime:%f %d %d\n", blockSize, numThreads, tot_count, t_end.tv_usec - t_start.tv_usec + (t_end.tv_sec*1000000 - t_start.tv_sec*1000000),time_elapsed, numBlocks, numThreadsPerBlock);
 #else
 			printf("blockSize:%d numThreads:%d totalCount:%d GPUTime:%f\n", blockSize, numThreads, tot_count,time_elapsed);
 #endif
@@ -366,6 +505,18 @@ int main(int argc, char *argv[])
 			if (!pflag)
 				pflag = 1;
 
+			if (fileSize > 65536) {
+				cudaFree(dev_stats);
+				cudaFree(dev_blockStart);
+				cudaFree(dev_blockEnd);
+				cudaFree(dev_fileBuf);
+			}
+
+			if (fileSize > 65535) {
+				free(blockStart);
+				free(blockEnd);
+				free(stats);
+			}
 		}
 	}
 

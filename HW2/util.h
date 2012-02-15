@@ -2,6 +2,9 @@
 #define __UTIL_H
 
 #include "string.h"
+#include <stdarg.h>
+#include <stdio.h>
+#include <time.h>
 
 #define MAX_WORDS 20
 #define MAX_WORD_LENGTH 256
@@ -26,7 +29,7 @@ enum VLOGLEVEL
 
 int splitLine(const char *in, char **out,const char *delim);
 int arrayContains(const char **array, const char *element, int arrayLen);
-int writeLog(const char *sourceFunction,enum VLOGLEVEL loglevel,int _systemLogLevel,char *logStr);
+int writeLog(const char *sourceFunction,enum VLOGLEVEL loglevel,int _systemLogLevel,char *fmt, ...);
 
 #endif
 

@@ -34,14 +34,17 @@ int arrayContains(const char **array, const char *element, int arrayLen)
 }
 
 
-int writeLog(const char *sourceFunction,enum VLOGLEVEL loglevel,int _system_log_level,char *logStr)
+int writeLog(const char *sourceFunction,enum VLOGLEVEL loglevel,int _system_log_level,char *fmt, ...)
 {
 	if (_system_log_level != (int) NONE)
 	{
 		char text[512];
+		char tempBuff[512];
 		struct tm *timeVal;
 		time_t currTime;
 		char timeBuff[64];
+		va_list argp;
+		
 
 		currTime = time(NULL);
 		timeVal = localtime(&currTime);
@@ -72,8 +75,12 @@ int writeLog(const char *sourceFunction,enum VLOGLEVEL loglevel,int _system_log_
 		}
 		strcat(text,sourceFunction);
 		strcat(text,"|");
+		
+		va_start(argp,fmt);
+		vsprintf(tempBuff,fmt,argp);
+		va_end(argp);
 
-		strcat(text,logStr);
+		strcat(text,tempBuff);
 		strcat(text,"\n");
 		if ( (_system_log_level & (int) loglevel) == (int) loglevel)
 		{
