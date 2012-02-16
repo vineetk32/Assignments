@@ -387,9 +387,9 @@ int main(int argc, char **argv)
 			printedOnce = 1;
 		}
 #ifndef _WIN32
-		printf("\n%d: %d: %d: %dus: \n",fileSize/numThreads,numThreads,totalLines,(end_time.tv_sec*1000000 - start_time.tv_sec*1000000) +  (end_time.tv_usec - start_time.tv_usec));
+		printf("\nblockSize:%d numThreads:%d totalCount:%d  CPUTime:%dus \n",fileSize/numThreads,numThreads,totalLines,(end_time.tv_sec*1000000 - start_time.tv_sec*1000000) +  (end_time.tv_usec - start_time.tv_usec));
 #else
-		printf("\n%d: %d: %d \n",fileSize/numThreads,numThreads,totalLines);
+		printf("\nblockSize:%d numThreads:%d totalCount:%d \n",fileSize/numThreads,numThreads,totalLines);
 #endif
 	}
 

@@ -19,17 +19,23 @@ typedef struct List
 	Node_t *end;
 } List_t;
 
-//A dummy type for destroyThreadPackage.
+enum THREADPACKAGETYPE
+{
+	RETRIEVER = 0,
+	ADDER = 1,
+	DELETER = 2
+};
+//A dummy pType for destroyThreadPackage.
 typedef struct generic_thread_package
 {
-	enum THREADPACKAGETYPE type;
+	enum THREADPACKAGETYPE pType;
 	List_t *list;
 	char *line;
 } generic_thread_package_t;
 
 typedef struct retriever_thread_package
 {
-	enum THREADPACKAGETYPE type;
+	enum THREADPACKAGETYPE pType;
 	List_t *list;
 	char *line;
 	pthread_mutex_t *deleter_lock;
@@ -40,7 +46,7 @@ typedef struct retriever_thread_package
 
 typedef struct adder_thread_package
 {
-	enum THREADPACKAGETYPE type;
+	enum THREADPACKAGETYPE pType;
 	List_t *list;
 	char *line;
 	pthread_mutex_t *adder_lock;
@@ -51,7 +57,7 @@ typedef struct adder_thread_package
 
 typedef struct deleter_thread_package
 {
-	enum THREADPACKAGETYPE type;
+	enum THREADPACKAGETYPE pType;
 	List_t *list;
 	char *line;
 	pthread_mutex_t *deleter_lock;
@@ -62,12 +68,6 @@ typedef struct deleter_thread_package
 	pthread_cond_t *adder_cond;
 } deleter_thread_package_t;
 
-enum THREADPACKAGETYPE
-{
-	RETRIEVER = 0,
-	ADDER = 1,
-	DELETER = 2
-};
 
 void initList(List_t *list);
 int addToList(List_t *list,void *item,size_t bytes);

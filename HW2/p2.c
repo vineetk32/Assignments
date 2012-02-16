@@ -279,7 +279,7 @@ void destroyThreadPackage(void *package)
 	generic_package->list = NULL;
 	free(generic_package->line);
 
-	/*if (generic_package->type == DELETER)
+	/*if (generic_package->pType == DELETER)
 	{
 		deleter_package = (deleter_thread_package_t *) package;
 		free(deleter_package->line);
@@ -291,7 +291,7 @@ void destroyThreadPackage(void *package)
 		pthread_cond_destroy(deleter_package->deleter_cond);
 		pthread_cond_destroy(deleter_package->retriever_cond);
 	}
-	else if (generic_package->type == ADDER || generic_package->type == RETRIEVER)
+	else if (generic_package->pType == ADDER || generic_package->pType == RETRIEVER)
 	{
 		retriever_package = (retriever_thread_package_t *) package;
 		free(retriever_package->line);
@@ -370,7 +370,7 @@ int main(int argc , char** argv)
 				case 'A':
 					newThread = (pthread_t *) malloc(sizeof(pthread_t));
 					adder_package = (adder_thread_package_t *) malloc(sizeof(adder_thread_package_t));
-					adder_package->type = ADDER;
+					adder_package->pType = ADDER;
 					adder_package->line = strdup(line+2);
 					adder_package->list = &data_list;
 					adder_package->adder_cond = &adder_cond;
@@ -389,7 +389,7 @@ int main(int argc , char** argv)
 					newThread = (pthread_t *) malloc(sizeof(pthread_t));
 					deleter_package = (deleter_thread_package_t *) malloc(sizeof(deleter_thread_package_t));
 
-					deleter_package->type = DELETER;
+					deleter_package->pType = DELETER;
 					deleter_package->line = strdup(line+2);
 					deleter_package->list = &data_list;
 					deleter_package->deleter_cond = &deleter_cond;
@@ -413,7 +413,7 @@ int main(int argc , char** argv)
 					newThread = (pthread_t *) malloc(sizeof(pthread_t));
 					retriever_package = (retriever_thread_package_t *) malloc(sizeof(retriever_thread_package_t));
 
-					retriever_package->type = RETRIEVER;
+					retriever_package->pType = RETRIEVER;
 					retriever_package->line = strdup(line+2);
 					retriever_package->list = &data_list;
 					retriever_package->deleter_cond = &deleter_cond;
@@ -451,8 +451,8 @@ int main(int argc , char** argv)
 						removeFromList(&package_list,curr_package_node,sizeof(curr_package_node));
 					}
 					//TODO: Clean the queue in a proper way.
-					//initList(&thread_list);
-					//initList(&package_list);
+					initList(&thread_list);
+					initList(&package_list);
 					break;
 				default:
 					fprintf(stderr,"Invalid command:%c\n",line[0]);
