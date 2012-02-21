@@ -1,0 +1,38 @@
+USA:
+2009:15:
+The Hangover:86000:8:2009:USA
+The Hurt Locker:86000:8:2009:USA
+2011:6:
+The Adventures of Tintin:95000:9:2011:USA
+1975:3:
+Jaws:97000:8:1975:USA
+1992:2:
+Aladdin:87000:7:1992:USA
+
+India:
+1999:5:
+Sarfarosh:92000:8:1999:India
+2009:3:
+Wanted:99000:8:2009:India
+2010:2:
+Ishqiya:32456:7:2010:India
+
+China:
+2010:3:
+Don Quixote:65000:8:2010:China
+Just Call Me Nobody:65000:8:2010:China
+
+2009:18:
+Wanted:99000:8:India
+2011:6:
+The Adventures of Tintin:95000:9:2011:USA
+1999:5:
+Sarfarosh:92000:8:1999:India
+2010:5:
+Don Quixote:65000:8:2010:China
+Just Call Me Nobody:65000:8:2010:China
+1975:3:
+Jaws:97000:8:1975:USA
+1992:2:
+Aladdin:87000:7:1992:USA
+

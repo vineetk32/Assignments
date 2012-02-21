@@ -1,0 +1,10 @@
+Jaws:97000:8:1975:USA
+The Spiral Staircase:1234:3:1975:USA
+Atlas Shrugged-Part I:56432:5:2011:USA
+Baadshah:12345:7:1999:India
+Hum Dil De Chuke Sanam:88000:8:1999:India
+The Adventures of Tintin:95000:9:2011:USA
+Just Call Me Nobody:65000:8:2010:China
+The Twilight Saga-Breaking Dawn-Part 1:6666:2:2011:USA
+The Adjustment Bureau:34500:6:2011:USA
+
