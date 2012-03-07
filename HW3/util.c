@@ -102,23 +102,24 @@ void initList(List_t *list)
 
 int addToList(List_t *list,void *item,size_t bytes){
 	int success = -1;
-	//void *buf = NULL;
+	void *buf = NULL;
 	Node_t *newItem = NULL;
 
 	newItem = (Node_t *) malloc(sizeof(Node_t));
-	if(newItem == NULL){
+	if(newItem == NULL) {
 		fprintf(stderr,"addToList: Malloc failed");
 		return -1;
 	}
 
-	/*buf = malloc(bytes+1);
+	buf = malloc(bytes);
 	if(buf == NULL){
 		fprintf(stderr,"addToList: Malloc failed");
 		return -1;
-	}*/
+	}
 
-	//memcpy(buf,item,bytes+1);
-	newItem->item = item;
+	memcpy(buf,item,bytes);
+	//newItem->item = item;
+	newItem->item = buf;
 	newItem->next = NULL;
 
 	if(list->begin == NULL || list->end == NULL){
@@ -201,3 +202,31 @@ int searchList(List_t *list,char *item,size_t bytes){
 	}
 	return -1;
 }
+
+char *ltrim(char *buffer,char *delims)
+{
+	int i = 0,j = 0;
+	char *newBuff = buffer;
+	while (1)
+	{
+		for (j = 0; j < strlen(delims); j++)
+		{
+			if (*buffer == delims[j])
+			{
+				newBuff++;
+			}
+			else if (*buffer == '\0')
+			{
+				return newBuff;
+			}
+		}
+		newBuff++;
+	}
+	return newBuff;
+}
+char *rtrim(char *buffer,char *delims)
+{
+	//TODO
+	return NULL;
+}
+
