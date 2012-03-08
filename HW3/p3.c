@@ -15,10 +15,10 @@ pthread_mutex_t insertMutex;
 pthread_mutex_t mutex;
 
 
-pthread_cond_t mutex_cond = PTHREAD_COND_INITIALIZER;
 
 int active = 0;
 int activeDeletes = 0;
+int condVar = 0;
 
 typedef struct list{
 char *item;
@@ -32,7 +32,14 @@ int searchThreads = 0;
 int insertThreads = 0;
 int deleteThreads = 0;
 
-bool addToList(char *item){
+
+void signalFunc(int sig)
+{
+	condVar++;
+}
+
+bool addToList(char *item)
+{
 	bool success = false;
 	
 	Node *new = NULL;
@@ -63,7 +70,8 @@ bool addToList(char *item){
 	return true;
 }
 
-void printList(){
+void printList()
+{
 	if(begin == NULL)
 		return;
 
@@ -76,7 +84,8 @@ void printList(){
 	}
 }
 
-bool removeFromList(char *item){
+bool removeFromList(char *item)
+{
 	if(end == NULL){
 		return false;
 	}
@@ -101,14 +110,15 @@ bool removeFromList(char *item){
 			free(temp->item);
 			free(temp);
 			return true;
-		}	
-		prev = temp;	
+		}
+		prev = temp;
 		temp = temp->next;
 	}
 	return false;
 }
 
-bool searchList(char *item){
+bool searchList(char *item)
+{
 	Node * temp;
 	temp = begin;
 	
@@ -125,9 +135,11 @@ bool searchList(char *item){
 	return false;
 }
 
-void printThreadInfo(char* operation, char* value, bool success, pthread_t tid){
+void printThreadInfo(char* operation, char* value, bool success, pthread_t tid)
+{
 	int len = strlen(value);
 	value[len-1] = '\0'; //remove the endline char
+	//usleep(400);
 	if(success)
 		printf("[%08x]    Success %s [ %s ] Retrievers : %i Adders : %i Removers : %i\n" ,tid, operation,value,searchThreads,insertThreads,deleteThreads);
 	else	
@@ -136,7 +148,8 @@ void printThreadInfo(char* operation, char* value, bool success, pthread_t tid){
 }
 
 
-void *searcher(void *args){
+void *searcher(void *args)
+{
 	int k;
 	pthread_mutex_lock(&mutex); //mutex for shared variable
 	active = active + 1;
@@ -149,16 +162,20 @@ void *searcher(void *args){
 	pthread_mutex_lock(&mutex);
 	active = active - 1;
 	searchThreads = searchThreads - 1;
-	if(active == 0 && activeDeletes>0){
+	if(active == 0 && activeDeletes>0)
+	{
 		for(k=0;k<activeDeletes;k++)
-			pthread_cond_signal(&mutex_cond);
+		{
+			raise(SIGUSR1);
 		}
+	}
 	pthread_mutex_unlock(&mutex);
 }
 
-void* inserter(void *args){
-pthread_mutex_lock(&insertMutex);
-int k;
+void* inserter(void *args)
+{
+	pthread_mutex_lock(&insertMutex);
+	int k;
 	pthread_mutex_lock(&mutex);
 	active = active + 1;
 	insertThreads = insertThreads + 1;
@@ -167,30 +184,45 @@ int k;
 	char* temp = (char*)args;
 	bool success = addToList(temp);
 	printThreadInfo("Add" , temp , success,pthread_self());
-	pthread_mutex_lock(&mutex);	
+	pthread_mutex_lock(&mutex);
 	active = active - 1;
 	insertThreads = insertThreads - 1;
-	if(active == 0 && activeDeletes>0){
+	if(active == 0 && activeDeletes>0)
+	{
 		for(k=0;k<activeDeletes;k++)
-			pthread_cond_signal(&mutex_cond); 
+		{
+			raise(SIGUSR1);
+		}
 	}
 	pthread_mutex_unlock(&mutex);
-pthread_mutex_unlock(&insertMutex);
+	pthread_mutex_unlock(&insertMutex);
 }
 
-void * deleter(void *args){
-pthread_mutex_lock(&mutex); 
-	while(active != 0){
+void * deleter(void *args)
+{
+
+	while(active != 0)
+	{
+		pthread_mutex_lock(&mutex); 
 		activeDeletes = activeDeletes + 1;
-		pthread_cond_wait(&mutex_cond,&mutex);
-		activeDeletes = activeDeletes-1;
+		pthread_mutex_unlock(&mutex);
+
+		while (condVar == 0)
+		{
+			;
 		}
+		pthread_mutex_lock(&mutex); 
+		condVar--;
+		activeDeletes = activeDeletes-1;
+		pthread_mutex_unlock(&mutex);
+	}
+	pthread_mutex_lock(&mutex); 
 	deleteThreads = deleteThreads + 1;
 	char* temp = (char*)args;
 	bool success = removeFromList(temp);
 	printThreadInfo("Delete" , temp , success,pthread_self());
 	deleteThreads = deleteThreads - 1;
-pthread_mutex_unlock(&mutex);
+	pthread_mutex_unlock(&mutex);
 }
 
 void initialize(void) 
@@ -199,10 +231,11 @@ void initialize(void)
 	pthread_mutex_init(&insertMutex, NULL);
 }
 
-
-int main(int argc , char** argv){
+int main(int argc , char** argv)
+{
 	pthread_t th[MAX_THREAD_NUM];
 	char* th_arg[MAX_THREAD_NUM];
+	struct sigaction userHandler;
 	int counter=0;
 	char c;
 	int l;
@@ -211,33 +244,39 @@ int main(int argc , char** argv){
 
 	setbuf(stdout,NULL);
 
-	 char filename[] = "p2_input.txt";
-	 FILE *file = fopen ( filename, "r" );
-	   if ( file != NULL )
-	   {
-	      char line [ 128 ]; /* or other suitable maximum line size */
-	      while ( fgets ( line, sizeof line, file ) != NULL ) /* read a line */
-      		{
-		char *token; 
-		token = strtok(line, " ");
-		c = token[0];
-                token = strtok(NULL, " ");
-			 switch(c){
-				case 'A' :		
+	char filename[] = "p2_input.txt";
+	FILE *file = fopen ( filename, "r" );
+
+	sigemptyset(&userHandler.sa_mask);
+	userHandler.sa_flags = 0;
+	userHandler.sa_handler = signalFunc;
+	sigaction(SIGUSR1,&userHandler,NULL);
+
+	if ( file != NULL )
+	{
+		char line [ 128 ]; /* or other suitable maximum line size */
+		while ( fgets ( line, sizeof line, file ) != NULL ) /* read a line */
+		{
+			char *token; 
+			token = strtok(line, " ");
+			c = token[0];
+			token = strtok(NULL, " ");
+			switch(c){
+				case 'A' :
 					th_arg[counter] = malloc(strlen(token) * sizeof(char) + 1);
 					strcpy(th_arg[counter],token);
-					pthread_create(&(th[counter]), NULL, inserter, (void*)(th_arg[counter]));			
+					pthread_create(&(th[counter]), NULL, inserter, (void*)(th_arg[counter]));
 					counter++;
 				break;
 				
 				case 'D' :
 					th_arg[counter] = malloc(strlen(token) * sizeof(char) + 1);
 					strcpy(th_arg[counter],token);
-					pthread_create(&(th[counter]), NULL, deleter, (void*)(th_arg[counter]));			
+					pthread_create(&(th[counter]), NULL, deleter, (void*)(th_arg[counter]));
 					counter++;
 				break;
 				
-				case 'M' :		
+				case 'M' :
 				for ( j = 0 ; j<counter ; j++ ){
 						if(th[j] != NULL){
 						pthread_join(th[j], NULL);
@@ -245,13 +284,13 @@ int main(int argc , char** argv){
 						free(th_arg[j]);
 					}
 					}
-				counter=0;
+				counter = 0;
 				break;
 				
 				case 'R' : 
 					th_arg[counter] = malloc(strlen(token) * sizeof(char) + 1);
 					strcpy(th_arg[counter],token);
-					pthread_create(&(th[counter]), NULL, searcher, (void*)(th_arg[counter]));			
+					pthread_create(&(th[counter]), NULL, searcher, (void*)(th_arg[counter]));
 					counter++;
 				break;
 				
@@ -261,10 +300,10 @@ int main(int argc , char** argv){
 		}
 		printList();
 		fclose ( file );
-	   }	
-	   else
-	   {
-	      perror ( filename ); /* why didn't the file open? */
-	   }
-	   return 0;
+	}
+	else
+	{
+		perror ( filename ); /* why didn't the file open? */
+	}
+	return 0;
 }
