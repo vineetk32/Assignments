@@ -51,10 +51,12 @@ void initList(List_t *list);
 int  addToList(List_t *list,void *item,size_t bytes);
 void printList(List_t *list);
 int  removeFromList(List_t *list,void *item,size_t bytes);
-int  searchList(List_t *list,char *item,size_t bytes);
+int  searchList(List_t *list,void *item,size_t bytes);
+
 
 int splitLine(const char *in, char **out,const char *delim);
 int arrayContains(const char **array, const char *element, int arrayLen);
+int shortArrayContains(short *array, short element, int arrayLen);
 int writeLog(const char *sourceFunction,enum VLOGLEVEL loglevel,int _systemLogLevel,char *fmt, ...);
 char *ltrim(char *buffer,char *delims);
 char *rtrim(char *buffer,char *delims);

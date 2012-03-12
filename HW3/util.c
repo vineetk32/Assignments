@@ -33,6 +33,19 @@ int arrayContains(const char **array, const char *element, int arrayLen)
 	return -1;
 }
 
+int shortArrayContains(short *array, short element, int arrayLen)
+{
+	int i;
+	for (i = 0; i < arrayLen; i++)
+	{
+		if (array[i] == element)
+		{
+			return i;
+		}
+	}
+	return -1;
+}
+
 
 int writeLog(const char *sourceFunction,enum VLOGLEVEL loglevel,int _system_log_level,char *fmt, ...)
 {
@@ -186,7 +199,7 @@ int removeFromList(List_t *list,void *item,size_t bytes){
 	return -1;
 }
 
-int searchList(List_t *list,char *item,size_t bytes){
+int searchList(List_t *list,void *item,size_t bytes){
 	Node_t * temp;
 	temp = list->begin;
 	
@@ -202,6 +215,7 @@ int searchList(List_t *list,char *item,size_t bytes){
 	}
 	return -1;
 }
+
 
 char *ltrim(char *buffer,char *delims)
 {
