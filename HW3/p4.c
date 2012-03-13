@@ -6,20 +6,22 @@
 #define __func__ __FUNCTION__
 #endif
 
+#define MAX_COUNTRIES 8
+
 int systemLogLevel;
 
 int main(int argc, char **argv)
 {
 	char tempBuff[MEDIUM_BUFFER_SIZE] = {'\0'};
 	char **splitBuff;
-	int i,numCountries = 0,numYears = 0,j;
+	int i,numCountries = 0,numYears = 0,j,k;
 	short globalYearArray[64];
 	short globalReleasesInYear[64];
 
 	char **countryArray;
-	short countryYearArray[8][64];
-	short countryReleasesInYear[8][64];
-	int countryNumYears[8];
+	short countryYearArray[MAX_COUNTRIES][64];
+	short countryReleasesInYear[MAX_COUNTRIES][64];
+	int countryNumYears[MAX_COUNTRIES];
 
 	FILE *fCountry,*fFileList,*fMovie;
 	List_t movieList;
@@ -29,9 +31,14 @@ int main(int argc, char **argv)
 	int index,yearIndex;
 	char **tempKeys;
 	unsigned short highestRating = 0,thisRating = 0;
+	collidedEntry_t collisions[256];
+	int numCollisions = 0;
 
-	countryArray = malloc(sizeof(char *) * 8);
-	for (i = 0; i< 8; i++)
+	char ***dataBuff;
+
+
+	countryArray = malloc(sizeof(char *) * MAX_COUNTRIES);
+	for (i = 0; i< MAX_COUNTRIES; i++)
 	{
 		countryArray[i] = malloc(sizeof(char) * SMALL_BUFFER_SIZE);
 		countryNumYears[i] = 0;
@@ -87,7 +94,7 @@ int main(int argc, char **argv)
 		return -1;
 	}
 
-	splitBuff = (char **) malloc(sizeof(char *) * 8);
+	splitBuff = (char **) malloc(sizeof(char *) * MAX_COUNTRIES);
 	
 	for(i = 0; i < 8;i++)
 	{
@@ -163,7 +170,7 @@ int main(int argc, char **argv)
 					{
 						countryReleasesInYear[index][yearIndex]++;
 					}
-					addToHashTable(&hashTable,tempKeys,2,&tempTuple);
+					addToHashTable(&hashTable,tempKeys,2,&tempTuple,&collisions,&numCollisions);
 					//free(insertEntry.keys[0]);
 					//free(insertEntry.keys[1]);
 				}
@@ -204,6 +211,15 @@ int main(int argc, char **argv)
 			{
 				tempEntry = &(hashTable.entries[index]);
 				printf("\n%s",((MovieTuple_t *)tempEntry->ptr)->line);
+				//Check collided Entries also
+				for (k = 0 ; k < numCollisions;k++)
+				{
+					if (collisions[k].bucketIndex == index)
+					{
+						printf("\n%s",collisions[k].tuple.line);
+					}
+				}
+
 			}
 		}
 	}
@@ -241,6 +257,14 @@ int main(int argc, char **argv)
 		printf("\n%d:%d:",globalYearArray[i],globalReleasesInYear[i]);
 		//printf("\n%s:%d:%d:%s",highestRatedMovie->movieName,highestRatedMovie->movieVotes,highestRatedMovie->movieRating,highestRatedMovie->movieCountry);
 		printf("\n%s",highestRatedMovie->line);
+		//Check collided Entries also
+		for (k = 0 ; k < numCollisions;k++)
+		{
+			if (collisions[k].bucketIndex == index)
+			{
+				printf("\n%s",collisions[k].tuple.line);
+			}
+		}
 	}
 
 	for (i = 0; i < 8; i++)
@@ -248,7 +272,7 @@ int main(int argc, char **argv)
 		free(splitBuff[i]);
 	}
 	free(splitBuff);
-	for (i = 0; i < 8; i++)
+	for (i = 0; i < MAX_COUNTRIES; i++)
 	{
 		free(countryArray[i]);
 	}
@@ -269,9 +293,8 @@ void initHashTable(myHashTable_t *table)
 	}
 }
 
-int addToHashTable(myHashTable_t *table, char **keys, int numKeys,MovieTuple_t *ptr)
+int addToHashTable(myHashTable_t *table, char **keys, int numKeys,MovieTuple_t *ptr,collidedEntry_t *collisions,int *numCollisions)
 {
-	//TODO: Handle collisions later.
 	int i = 0;
 	unsigned int bucketIndex = 0;
 	for (i = 0; i < numKeys; i++)
@@ -288,8 +311,9 @@ int addToHashTable(myHashTable_t *table, char **keys, int numKeys,MovieTuple_t *
 		}
 		else if ( collisionBreaker(&table->entries[bucketIndex],ptr) == -1)
 		{
-			//Add to collided entries
-			;
+			memcpy(&collisions[(*numCollisions)].tuple,ptr,sizeof(MovieTuple_t));
+			collisions[(*numCollisions)].bucketIndex = bucketIndex;
+			(*numCollisions)++;
 		}
 		return 0;
 	}

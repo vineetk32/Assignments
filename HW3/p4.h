@@ -36,11 +36,12 @@ typedef struct myHashTable
 	myHashEntry_t entries[BUCKET_SIZE];
 }myHashTable_t;
 
-int addToHashTable(myHashTable_t *table, char **keys, int numKeys,MovieTuple_t *ptr);
+int addToHashTable(myHashTable_t *table, char **keys, int numKeys,MovieTuple_t *ptr,collidedEntry_t *collisions,int *numCollisions);
 unsigned int getFromHashTable(myHashTable_t *table, char **keys, int numKeys);
 unsigned int hashFunction(unsigned int seed,char *key);
 void printHashTable(myHashTable_t *table);
 void initHashTable(myHashEntry_t *table);
 int collisionBreaker(myHashEntry_t *entry1,MovieTuple_t *movieTuple);
 void sortYearReleases(short yearArray[64],short releasesInYear[64],int numYears);
+
 #endif

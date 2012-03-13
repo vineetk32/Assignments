@@ -15,6 +15,7 @@ pthread_mutex_t insertMutex;
 pthread_mutex_t mutex;
 
 
+//pthread_cond_t mutex_cond = PTHREAD_COND_INITIALIZER;
 
 int active = 0;
 int activeDeletes = 0;
@@ -139,7 +140,7 @@ void printThreadInfo(char* operation, char* value, bool success, pthread_t tid)
 {
 	int len = strlen(value);
 	value[len-1] = '\0'; //remove the endline char
-	//usleep(400);
+	usleep(400);
 	if(success)
 		printf("[%08x]    Success %s [ %s ] Retrievers : %i Adders : %i Removers : %i\n" ,tid, operation,value,searchThreads,insertThreads,deleteThreads);
 	else	
@@ -166,6 +167,7 @@ void *searcher(void *args)
 	{
 		for(k=0;k<activeDeletes;k++)
 		{
+			//pthread_cond_signal(&mutex_cond);
 			raise(SIGUSR1);
 		}
 	}
@@ -191,6 +193,7 @@ void* inserter(void *args)
 	{
 		for(k=0;k<activeDeletes;k++)
 		{
+			//pthread_cond_signal(&mutex_cond); 
 			raise(SIGUSR1);
 		}
 	}
@@ -206,7 +209,7 @@ void * deleter(void *args)
 		pthread_mutex_lock(&mutex); 
 		activeDeletes = activeDeletes + 1;
 		pthread_mutex_unlock(&mutex);
-
+		//pthread_cond_wait(&mutex_cond,&mutex);
 		while (condVar == 0)
 		{
 			;
@@ -241,11 +244,19 @@ int main(int argc , char** argv)
 	int l;
 	int j;
 	int len;
+	FILE *file;
 
 	setbuf(stdout,NULL);
 
 	char filename[] = "p2_input.txt";
-	FILE *file = fopen ( filename, "r" );
+	if (argc == 0)
+	{
+		file = fopen ( filename, "r" );
+	}
+	else
+	{
+		file = fopen ( argv[1], "r");
+	}
 
 	sigemptyset(&userHandler.sa_mask);
 	userHandler.sa_flags = 0;
