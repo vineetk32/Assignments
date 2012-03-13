@@ -140,7 +140,7 @@ void printThreadInfo(char* operation, char* value, bool success, pthread_t tid)
 {
 	int len = strlen(value);
 	value[len-1] = '\0'; //remove the endline char
-	usleep(400);
+	usleep(100);
 	if(success)
 		printf("[%08x]    Success %s [ %s ] Retrievers : %i Adders : %i Removers : %i\n" ,tid, operation,value,searchThreads,insertThreads,deleteThreads);
 	else	
@@ -203,28 +203,27 @@ void* inserter(void *args)
 
 void * deleter(void *args)
 {
-
+	//pthread_mutex_lock(&mutex); 
+	pthread_mutex_lock(&mutex); 
+	activeDeletes = activeDeletes + 1;
+	pthread_mutex_unlock(&mutex);
 	while(active != 0)
 	{
-		pthread_mutex_lock(&mutex); 
-		activeDeletes = activeDeletes + 1;
-		pthread_mutex_unlock(&mutex);
-		//pthread_cond_wait(&mutex_cond,&mutex);
 		while (condVar == 0)
 		{
 			;
 		}
-		pthread_mutex_lock(&mutex); 
-		condVar--;
-		activeDeletes = activeDeletes-1;
-		pthread_mutex_unlock(&mutex);
 	}
 	pthread_mutex_lock(&mutex); 
+	condVar--;
+	//pthread_mutex_unlock(&mutex);
+	//pthread_mutex_lock(&mutex); 
 	deleteThreads = deleteThreads + 1;
 	char* temp = (char*)args;
 	bool success = removeFromList(temp);
 	printThreadInfo("Delete" , temp , success,pthread_self());
 	deleteThreads = deleteThreads - 1;
+	activeDeletes = activeDeletes-1;
 	pthread_mutex_unlock(&mutex);
 }
 
@@ -261,6 +260,8 @@ int main(int argc , char** argv)
 	sigemptyset(&userHandler.sa_mask);
 	userHandler.sa_flags = 0;
 	userHandler.sa_handler = signalFunc;
+	sigaddset(&userHandler.sa_mask,SIGUSR1);
+	sigprocmask(SIG_UNBLOCK,&userHandler.sa_mask,NULL);
 	sigaction(SIGUSR1,&userHandler,NULL);
 
 	if ( file != NULL )
