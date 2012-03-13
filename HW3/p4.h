@@ -15,7 +15,7 @@ typedef struct MovieTuple
 	unsigned short movieRating;
 	unsigned short movieYear;
 	char movieCountry[MICRO_BUFFER_SIZE];
-	char line[BUFFER_SIZE];
+	char *line;
 } MovieTuple_t;
 
 typedef struct myHashEntry
@@ -40,8 +40,10 @@ int addToHashTable(myHashTable_t *table, char **keys, int numKeys,MovieTuple_t *
 unsigned int getFromHashTable(myHashTable_t *table, char **keys, int numKeys);
 unsigned int hashFunction(unsigned int seed,char *key);
 void printHashTable(myHashTable_t *table);
-void initHashTable(myHashEntry_t *table);
+void initHashTable(myHashTable_t *table);
 int collisionBreaker(myHashEntry_t *entry1,MovieTuple_t *movieTuple);
 void sortYearReleases(short yearArray[64],short releasesInYear[64],int numYears);
+
+void actualWorkFunction(char **lineBuff,int start,int end);
 
 #endif

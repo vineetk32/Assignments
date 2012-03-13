@@ -7,41 +7,54 @@
 #endif
 
 #define MAX_COUNTRIES 8
+#define CHARS_PER_LINE 128
+#define LINES_PER_COUNTRY 10000
 
+//Yes, I made all of them global
 int systemLogLevel;
+char **countryArray;
+short countryYearArray[MAX_COUNTRIES][64];
+short countryReleasesInYear[MAX_COUNTRIES][64];
+int countryNumYears[MAX_COUNTRIES];
+int countryNumMovies[MAX_COUNTRIES];
+
+int numCountries = 0,numYears = 0;
+short globalYearArray[64];
+short globalReleasesInYear[64];
+myHashTable_t hashTable;
+
+collidedEntry_t collisions[256];
+int numCollisions = 0;
+
 
 int main(int argc, char **argv)
 {
 	char tempBuff[MEDIUM_BUFFER_SIZE] = {'\0'};
-	char **splitBuff;
-	int i,numCountries = 0,numYears = 0,j,k;
-	short globalYearArray[64];
-	short globalReleasesInYear[64];
 
-	char **countryArray;
-	short countryYearArray[MAX_COUNTRIES][64];
-	short countryReleasesInYear[MAX_COUNTRIES][64];
-	int countryNumYears[MAX_COUNTRIES];
+	int i,j,k;
 
 	FILE *fCountry,*fFileList,*fMovie;
-	List_t movieList;
-	MovieTuple_t tempTuple,*highestRatedMovie;
+	MovieTuple_t *highestRatedMovie;
 	myHashEntry_t *tempEntry;
-	myHashTable_t hashTable;
-	int index,yearIndex;
-	char **tempKeys;
+
+	int index;
 	unsigned short highestRating = 0,thisRating = 0;
-	collidedEntry_t collisions[256];
-	int numCollisions = 0;
-
 	char ***dataBuff;
+	char **tempKeys,**splitBuff;
 
-
+	
+	dataBuff = malloc(sizeof(char **) * MAX_COUNTRIES);
 	countryArray = malloc(sizeof(char *) * MAX_COUNTRIES);
 	for (i = 0; i< MAX_COUNTRIES; i++)
 	{
+		dataBuff[i] = malloc(sizeof(char *) * LINES_PER_COUNTRY);
 		countryArray[i] = malloc(sizeof(char) * SMALL_BUFFER_SIZE);
 		countryNumYears[i] = 0;
+		countryNumMovies[i] = 0;
+		for (j = 0; j < LINES_PER_COUNTRY; j++)
+		{
+			dataBuff[i][j] = malloc (sizeof(char) * CHARS_PER_LINE);
+		}
 	}
 
 	initHashTable(&hashTable);
@@ -51,8 +64,6 @@ int main(int argc, char **argv)
 #else
 	systemLogLevel = VSEVERE;
 #endif
-
-	initList(&movieList);
 
 	if (argc != 3)
 	{
@@ -94,8 +105,7 @@ int main(int argc, char **argv)
 		return -1;
 	}
 
-	splitBuff = (char **) malloc(sizeof(char *) * MAX_COUNTRIES);
-	
+	splitBuff = (char **) malloc(sizeof(char *) * 8);
 	for(i = 0; i < 8;i++)
 	{
 		splitBuff[i] = (char *) malloc ( MAX_WORD_LENGTH * sizeof(char));
@@ -118,10 +128,6 @@ int main(int argc, char **argv)
 #endif
 			tempBuff[0] = '\0';
 
-			tempKeys = (char **) malloc (sizeof(char *) * 2);
-			tempKeys[0] = malloc (sizeof(char) * 8);
-			tempKeys[1] = malloc (sizeof(char) * 64);
-
 			while (fgets(tempBuff,SMALL_BUFFER_SIZE,fMovie) != NULL)
 			{
 				tempBuff[strlen(tempBuff) -1 ] = '\0';
@@ -130,55 +136,28 @@ int main(int argc, char **argv)
 #ifdef DEBUG
 					printf("Splitting %s\n",tempBuff);
 #endif
-					strcpy(tempTuple.line,tempBuff);
+
 					if (splitLine(tempBuff,splitBuff,":") != 5)
 					{
 						writeLog(__func__,VERROR,systemLogLevel,"Badly formed movie record: %s",tempBuff);
 					}
 					else
 					{
-						strcpy(tempTuple.movieName,splitBuff[0]);
-						tempTuple.movieVotes = (unsigned int) atoi(splitBuff[1]);
-						tempTuple.movieRating = (unsigned short) atoi(splitBuff[2]);
-						tempTuple.movieYear = (unsigned short) atoi(splitBuff[3]);
-						strcpy(tempTuple.movieCountry,splitBuff[4]);
+						//Nice! so I will split the line, an put the unsplit line back in the buffer!
+						index = arrayContains(countryArray,splitBuff[4],numCountries);
+						strcpy(dataBuff[index][countryNumMovies[index]++],tempBuff);
 					}
-
-					sprintf(tempKeys[0],"%d",tempTuple.movieYear);
-
-					strcpy(tempKeys[1],tempTuple.movieCountry);
-
-					index = shortArrayContains(globalYearArray,tempTuple.movieYear,numYears);
-					if (index == -1)
-					{
-						globalReleasesInYear[numYears] = 1;
-						globalYearArray[numYears++] = tempTuple.movieYear;
-					}
-					else
-					{
-						globalReleasesInYear[index]++;
-					}
-					index = arrayContains(countryArray,tempTuple.movieCountry,numCountries);
-					yearIndex = shortArrayContains(countryYearArray[index],tempTuple.movieYear,countryNumYears[index]);
-					if (yearIndex == -1)
-					{
-						countryReleasesInYear[index][countryNumYears[index]] = 1;
-						countryYearArray[index][countryNumYears[index]] = tempTuple.movieYear;
-						countryNumYears[index]++;
-					}
-					else
-					{
-						countryReleasesInYear[index][yearIndex]++;
-					}
-					addToHashTable(&hashTable,tempKeys,2,&tempTuple,&collisions,&numCollisions);
-					//free(insertEntry.keys[0]);
-					//free(insertEntry.keys[1]);
 				}
 				tempBuff[0] = '\0';
 			}
 		tempBuff[0] = '\0';
 		fclose(fMovie);
 		}
+	}
+
+	for (i = 0; i < numCountries;i++)
+	{
+		actualWorkFunction(dataBuff[i],0,countryNumMovies[i]);
 	}
 
 #ifdef DEBUG
@@ -189,6 +168,10 @@ int main(int argc, char **argv)
 	}
 	printf("\n");
 #endif
+
+	tempKeys = malloc(sizeof(char *) * 2);
+	tempKeys[0] = malloc(sizeof(char) * 8);
+	tempKeys[1] = malloc(sizeof(char) * 64);
 
 	//Output Phase1 - top rated movies per year, per country
 	for (i = 0; i < numCountries; i++)
@@ -266,7 +249,7 @@ int main(int argc, char **argv)
 			}
 		}
 	}
-
+	printf("\n\n");
 	for (i = 0; i < 8; i++)
 	{
 		free(splitBuff[i]);
@@ -431,5 +414,71 @@ void sortYearReleases(short yearArray[64],short releasesInYear[64],int numYears)
 			}
 		}
 	}
+}
 
+void actualWorkFunction(char **lineBuff,int start,int end)
+{
+	char **tempKeys;
+	MovieTuple_t tempTuple;
+	char **splitBuff;
+	int yearIndex,index;
+	char tempBuff[MEDIUM_BUFFER_SIZE] = {'\0'};
+	int i;
+	
+	tempKeys = malloc(sizeof(char *) * 2);
+	tempKeys[0] = malloc(sizeof(char) * 8);
+	tempKeys[1] = malloc(sizeof(char) * 64);
+
+	splitBuff = (char **) malloc(sizeof(char *) * 8);
+	for(i = 0; i < 8;i++)
+	{
+		splitBuff[i] = (char *) malloc ( MAX_WORD_LENGTH * sizeof(char));
+	}
+
+	for (i = start; i < end; i++)
+	{
+		strcpy(tempBuff,lineBuff[i]);
+		if (splitLine(tempBuff,splitBuff,":") != 5)
+		{
+			writeLog(__func__,VERROR,systemLogLevel,"Badly formed movie record: %s",tempBuff);
+		}
+		else
+		{
+			tempTuple.line = lineBuff[i];
+			strcpy(tempTuple.movieName,splitBuff[0]);
+			tempTuple.movieVotes = (unsigned int) atoi(splitBuff[1]);
+			tempTuple.movieRating = (unsigned short) atoi(splitBuff[2]);
+			tempTuple.movieYear = (unsigned short) atoi(splitBuff[3]);
+			strcpy(tempTuple.movieCountry,splitBuff[4]);
+
+
+			sprintf(tempKeys[0],"%d",tempTuple.movieYear);
+
+			strcpy(tempKeys[1],tempTuple.movieCountry);
+
+			index = shortArrayContains(globalYearArray,tempTuple.movieYear,numYears);
+			if (index == -1)
+			{
+				globalReleasesInYear[numYears] = 1;
+				globalYearArray[numYears++] = tempTuple.movieYear;
+			}
+			else
+			{
+				globalReleasesInYear[index]++;
+			}
+			index = arrayContains(countryArray,tempTuple.movieCountry,numCountries);
+			yearIndex = shortArrayContains(countryYearArray[index],tempTuple.movieYear,countryNumYears[index]);
+			if (yearIndex == -1)
+			{
+				countryReleasesInYear[index][countryNumYears[index]] = 1;
+				countryYearArray[index][countryNumYears[index]] = tempTuple.movieYear;
+				countryNumYears[index]++;
+			}
+			else
+			{
+				countryReleasesInYear[index][yearIndex]++;
+			}
+			addToHashTable(&hashTable,tempKeys,2,&tempTuple,&collisions,&numCollisions);
+		}
+	}
 }
