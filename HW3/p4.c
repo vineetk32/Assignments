@@ -1,4 +1,198 @@
-#include "p4.h"
+#include <stdio.h>
+//#include "util.h"
+#include <stdlib.h>
+#include <stdarg.h>
+#include <string.h>
+#include <time.h>
+#include <pthread.h>
+#include "myatomic.h"
+
+#define BUCKET_SIZE 512
+#define MICRO_BUFFER_SIZE 32
+#define SMALL_BUFFER_SIZE 128
+#define MEDIUM_BUFFER_SIZE 256
+#define BUFFER_SIZE 1024
+
+#define MAX_WORDS 20
+#define MAX_WORD_LENGTH 256
+
+typedef struct MovieTuple
+{
+	char movieName[SMALL_BUFFER_SIZE];
+	unsigned int movieVotes;
+	unsigned short movieRating;
+	unsigned short movieYear;
+	char movieCountry[MICRO_BUFFER_SIZE];
+	char *line;
+} MovieTuple_t;
+
+
+enum VLOGLEVEL
+{
+	NONE = 0,
+	VINFO = 1,
+	VWARNING = 2,
+	VERROR = 4,
+	VSEVERE = 8,
+	VDEBUG = 15
+};
+
+typedef struct myHashEntry
+{
+	char **keys;
+	void *ptr;
+	int numKeys;
+}myHashEntry_t;
+
+typedef struct collidedEntry
+{
+	MovieTuple_t tuple;
+	unsigned int bucketIndex;
+} collidedEntry_t;
+
+typedef struct threadPackage
+{
+	int start,end;
+	char **lineBuff;
+	pthread_mutex_t *mutex;
+} threadPackage_t;
+
+typedef struct myHashTable
+{
+	myHashEntry_t entries[BUCKET_SIZE];
+}myHashTable_t;
+
+#ifdef _WIN32
+#define my_strtok strtok_s
+#else
+#define my_strtok strtok_r
+#endif
+
+int __test_and_set(int *mutex)
+{
+	return compare_and_swap(mutex,0,1);
+}
+
+int __test_test_and_set(int *mutex);
+
+int splitLine(const char *in, char **out,const char *delim)
+{
+	int i = 0;
+	char *ptr, *saveptr;
+	char tempBuff[BUFFER_SIZE] = {'\0'};
+	strcpy(tempBuff,in);
+
+	ptr = my_strtok(tempBuff,delim,&saveptr);
+	while (ptr != NULL)
+	{
+		out[i][0] = '\0';
+		strcpy(out[i],ptr);
+		i++;
+		ptr = my_strtok(NULL,delim,&saveptr);
+
+	}
+	return i;
+
+}
+
+int arrayContains(const char **array, const char *element, int arrayLen)
+{
+	int i;
+	for (i = 0; i < arrayLen; i++)
+	{
+		if (strcmp(array[i],element) == 0)
+		{
+			return i;
+		}
+	}
+	return -1;
+}
+
+int shortArrayContains(short *array, short element, int arrayLen)
+{
+	int i;
+	for (i = 0; i < arrayLen; i++)
+	{
+		if (array[i] == element)
+		{
+			return i;
+		}
+	}
+	return -1;
+}
+
+
+int writeLog(const char *sourceFunction,enum VLOGLEVEL loglevel,int _system_log_level,char *fmt, ...)
+{
+	if (_system_log_level != (int) NONE)
+	{
+		char text[512];
+		char tempBuff[512];
+		struct tm *timeVal;
+		time_t currTime;
+		char timeBuff[64];
+		va_list argp;
+		
+
+		currTime = time(NULL);
+		timeVal = localtime(&currTime);
+		strftime(timeBuff,64,"%Y%m%d %H:%M:%S|",timeVal);
+		strcpy(text,timeBuff);
+
+	
+		//LogFormat - Date|LOGLEVEL|SourceFunction|LogString
+		if (loglevel == VERROR)
+		{
+			strcat(text,"ERROR|");
+		}
+		else if (loglevel == VWARNING)
+		{
+			strcat(text,"WARNING|");
+		}
+		else if (loglevel == VSEVERE)
+		{
+			strcat(text,"SEVERE|");
+		}
+		else if (loglevel == VINFO)
+		{
+			strcat(text,"INFO|");
+		}
+		else if (loglevel == VDEBUG)
+		{
+			strcat(text,"DEBUG|");
+		}
+		strcat(text,sourceFunction);
+		strcat(text,"|");
+		
+		va_start(argp,fmt);
+		vsprintf(tempBuff,fmt,argp);
+		va_end(argp);
+
+		strcat(text,tempBuff);
+		strcat(text,"\n");
+		if ( (_system_log_level & (int) loglevel) == (int) loglevel)
+		{
+			#ifdef _WIN32
+				printf(text);
+			#else
+				write(1,text,strlen(text));
+			#endif
+		}
+	}
+	return 0;
+}
+
+
+int addToHashTable(myHashTable_t *table, char **keys, int numKeys,MovieTuple_t *ptr,collidedEntry_t *collisions,int *numCollisions);
+unsigned int getFromHashTable(myHashTable_t *table, char **keys, int numKeys);
+unsigned int hashFunction(unsigned int seed,char *key);
+void printHashTable(myHashTable_t *table);
+void initHashTable(myHashTable_t *table);
+int collisionBreaker(myHashEntry_t *entry1,MovieTuple_t *movieTuple);
+void sortYearReleases(short yearArray[64],short releasesInYear[64],int numYears);
+
+void actualWorkFunction(char **lineBuff,int start,int end,pthread_mutex_t *mutex);
+
 
 //#define DEBUG
 
@@ -25,7 +219,14 @@ myHashTable_t hashTable;
 
 collidedEntry_t collisions[256];
 int numCollisions = 0;
+pthread_mutex_t tableMutex;
 
+void *threadFunc(void *args)
+{
+	threadPackage_t *package = (threadPackage_t *) args;
+	actualWorkFunction(package->lineBuff,package->start,package->end,package->mutex);
+	return NULL;
+}
 
 int main(int argc, char **argv)
 {
@@ -41,6 +242,10 @@ int main(int argc, char **argv)
 	unsigned short highestRating = 0,thisRating = 0;
 	char ***dataBuff;
 	char **tempKeys,**splitBuff;
+	int totalMovies = 0;
+
+	pthread_t workerThreads[MAX_COUNTRIES * 2];
+	threadPackage_t packages[MAX_COUNTRIES * 2];
 
 	
 	dataBuff = malloc(sizeof(char **) * MAX_COUNTRIES);
@@ -58,6 +263,7 @@ int main(int argc, char **argv)
 	}
 
 	initHashTable(&hashTable);
+	pthread_mutex_init(&tableMutex,NULL);
 
 #ifdef DEBUG
 	systemLogLevel = VDEBUG;
@@ -130,6 +336,7 @@ int main(int argc, char **argv)
 
 			while (fgets(tempBuff,SMALL_BUFFER_SIZE,fMovie) != NULL)
 			{
+				totalMovies++;
 				tempBuff[strlen(tempBuff) -1 ] = '\0';
 				if (strlen(tempBuff) > 5)
 				{
@@ -143,7 +350,7 @@ int main(int argc, char **argv)
 					}
 					else
 					{
-						//Nice! so I will split the line, an put the unsplit line back in the buffer!
+						//Nice! so I will split the line, and put the unsplit line back in the buffer!
 						index = arrayContains(countryArray,splitBuff[4],numCountries);
 						strcpy(dataBuff[index][countryNumMovies[index]++],tempBuff);
 					}
@@ -155,11 +362,46 @@ int main(int argc, char **argv)
 		}
 	}
 
-	for (i = 0; i < numCountries;i++)
+#ifdef DEBUG
+	printf("\nTotal Movies - %d ",totalMovies);
+#endif
+
+	/*for (i = 0; i < numCountries;i++)
 	{
 		actualWorkFunction(dataBuff[i],0,countryNumMovies[i]);
+	}*/
+	//Two threads per country
+	j = 0;
+	for (i = 0; i < numCountries; i++)
+	{
+		packages[j].start = 0;
+		packages[j].end = countryNumMovies[i] / 2;
+		packages[j].lineBuff = dataBuff[i];
+		packages[j].mutex = &tableMutex;
+		pthread_create(&workerThreads[j],NULL,threadFunc,(void *)&packages[j]);
+#ifdef DEBUG
+	printf("\nThread %d: Start:%d, End:%d, Country:%d",j,packages[j].start,packages[j].end,i);
+#endif
+		j++;
+		packages[j].start = packages[j-1].end;
+		packages[j].end = countryNumMovies[i];
+		packages[j].lineBuff = dataBuff[i];
+		packages[j].mutex = &tableMutex;
+		pthread_create(&workerThreads[j],NULL,threadFunc,(void *)&packages[j]);
+
+#ifdef DEBUG
+	printf("\nThread %d: Start:%d, End:%d",j,packages[j].start,packages[j].end);
+#endif
+		j++;
 	}
 
+	//sleep(5);
+	j = 0;
+	for (i = 0; i < numCountries; i++)
+	{
+		pthread_join(workerThreads[j++],NULL);
+		pthread_join(workerThreads[j],NULL);
+	}
 #ifdef DEBUG
 	printf("Years - ");
 	for (i = 0; i < numYears; i++)
@@ -202,7 +444,6 @@ int main(int argc, char **argv)
 						printf("\n%s",collisions[k].tuple.line);
 					}
 				}
-
 			}
 		}
 	}
@@ -245,7 +486,12 @@ int main(int argc, char **argv)
 		{
 			if (collisions[k].bucketIndex == index)
 			{
-				printf("\n%s",collisions[k].tuple.line);
+				//For some reason same movie is being inserted.
+				////Handled upstream also;
+				if (strcmp(collisions[k].tuple.movieName,highestRatedMovie->movieName) != 0)
+				{
+					printf("\n%s",collisions[k].tuple.line);
+				}
 			}
 		}
 	}
@@ -254,12 +500,18 @@ int main(int argc, char **argv)
 	{
 		free(splitBuff[i]);
 	}
-	free(splitBuff);
 	for (i = 0; i < MAX_COUNTRIES; i++)
 	{
 		free(countryArray[i]);
+		for (j = 0; j < LINES_PER_COUNTRY; j++)
+		{
+			free(dataBuff[i][j]);
+		}
+		free(dataBuff[i]);
 	}
+	free(splitBuff);
 	free(countryArray);
+	free(dataBuff);
 	free(tempKeys[0]);
 	free(tempKeys[1]);
 	free(tempKeys);
@@ -288,17 +540,21 @@ int addToHashTable(myHashTable_t *table, char **keys, int numKeys,MovieTuple_t *
 	if (table->entries[bucketIndex].numKeys != 0)
 	{
 		writeLog(__func__,VINFO,systemLogLevel,"Collision for keys %s%s and %s%s.",table->entries[bucketIndex].keys[0],table->entries[bucketIndex].keys[1],keys[0],keys[1]);
-		if ( collisionBreaker(&table->entries[bucketIndex],ptr) == 1)
+
+		if (strcmp(((MovieTuple_t *)(table->entries[bucketIndex].ptr))->movieName,ptr->movieName) != 0)
 		{
-			memcpy(table->entries[bucketIndex].ptr,ptr,sizeof(MovieTuple_t));
+			if ( collisionBreaker(&table->entries[bucketIndex],ptr) == 1)
+			{
+				memcpy(table->entries[bucketIndex].ptr,ptr,sizeof(MovieTuple_t));
+			}
+			else if ( collisionBreaker(&table->entries[bucketIndex],ptr) == -1)
+			{
+				memcpy(&collisions[(*numCollisions)].tuple,ptr,sizeof(MovieTuple_t));
+				collisions[(*numCollisions)].bucketIndex = bucketIndex;
+				(*numCollisions)++;
+			}
+			return 0;
 		}
-		else if ( collisionBreaker(&table->entries[bucketIndex],ptr) == -1)
-		{
-			memcpy(&collisions[(*numCollisions)].tuple,ptr,sizeof(MovieTuple_t));
-			collisions[(*numCollisions)].bucketIndex = bucketIndex;
-			(*numCollisions)++;
-		}
-		return 0;
 	}
 	table->entries[bucketIndex].numKeys = numKeys;
 	table->entries[bucketIndex].keys = malloc(sizeof(char *) * 2);
@@ -416,11 +672,11 @@ void sortYearReleases(short yearArray[64],short releasesInYear[64],int numYears)
 	}
 }
 
-void actualWorkFunction(char **lineBuff,int start,int end)
+void actualWorkFunction(char **lineBuff,int start,int end,pthread_mutex_t *mutex)
 {
 	char **tempKeys;
 	MovieTuple_t tempTuple;
-	char **splitBuff;
+	char **splitBuffer;
 	int yearIndex,index;
 	char tempBuff[MEDIUM_BUFFER_SIZE] = {'\0'};
 	int i;
@@ -429,27 +685,27 @@ void actualWorkFunction(char **lineBuff,int start,int end)
 	tempKeys[0] = malloc(sizeof(char) * 8);
 	tempKeys[1] = malloc(sizeof(char) * 64);
 
-	splitBuff = (char **) malloc(sizeof(char *) * 8);
+	splitBuffer = (char **) malloc(sizeof(char *) * 8);
 	for(i = 0; i < 8;i++)
 	{
-		splitBuff[i] = (char *) malloc ( MAX_WORD_LENGTH * sizeof(char));
+		splitBuffer[i] = (char *) malloc ( MAX_WORD_LENGTH * sizeof(char));
 	}
 
 	for (i = start; i < end; i++)
 	{
 		strcpy(tempBuff,lineBuff[i]);
-		if (splitLine(tempBuff,splitBuff,":") != 5)
+		if (splitLine(tempBuff,splitBuffer,":") != 5)
 		{
 			writeLog(__func__,VERROR,systemLogLevel,"Badly formed movie record: %s",tempBuff);
 		}
 		else
 		{
 			tempTuple.line = lineBuff[i];
-			strcpy(tempTuple.movieName,splitBuff[0]);
-			tempTuple.movieVotes = (unsigned int) atoi(splitBuff[1]);
-			tempTuple.movieRating = (unsigned short) atoi(splitBuff[2]);
-			tempTuple.movieYear = (unsigned short) atoi(splitBuff[3]);
-			strcpy(tempTuple.movieCountry,splitBuff[4]);
+			strcpy(tempTuple.movieName,splitBuffer[0]);
+			tempTuple.movieVotes = (unsigned int) atoi(splitBuffer[1]);
+			tempTuple.movieRating = (unsigned short) atoi(splitBuffer[2]);
+			tempTuple.movieYear = (unsigned short) atoi(splitBuffer[3]);
+			strcpy(tempTuple.movieCountry,splitBuffer[4]);
 
 
 			sprintf(tempKeys[0],"%d",tempTuple.movieYear);
@@ -478,7 +734,39 @@ void actualWorkFunction(char **lineBuff,int start,int end)
 			{
 				countryReleasesInYear[index][yearIndex]++;
 			}
+			pthread_mutex_lock(mutex);
 			addToHashTable(&hashTable,tempKeys,2,&tempTuple,&collisions,&numCollisions);
+			pthread_mutex_unlock(mutex);
 		}
 	}
+	for (i = 0; i < 8; i++)
+	{
+		free(splitBuffer[i]);
+	}
+	free(splitBuffer);
+	free(tempKeys[0]);
+	free(tempKeys[1]);
+	free(tempKeys);
+}
+
+int __test_test_and_set(int *mutex)
+{
+	// Test and set call. 100 tries.
+	int counter = 100;
+	while (counter > 0)
+	{
+		while ( *mutex == 0);
+		if (__test_and_set(*mutex)  == 1)
+		{
+			return 0;
+		}
+		counter--;
+	}
+	return -1;
+}
+
+int mythread_mutex_lock(int *lock)
+{
+	// Check the test_test_and_set value.
+	// returns -1 if mutex value is LOCKED
 }
