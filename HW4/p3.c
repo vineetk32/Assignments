@@ -44,7 +44,7 @@ typedef struct myHashEntry
 
 typedef struct collidedEntry
 {
-	MovieTuple_t tuple;
+	MovieTuple_t *tuple;
 	unsigned int bucketIndex;
 } collidedEntry_t;
 
@@ -201,8 +201,10 @@ short globalYearArray[64];
 short globalReleasesInYear[64];
 myHashTable_t hashTable;
 
-collidedEntry_t collisions[256];
+collidedEntry_t *collisions;
 int numCollisions = 0;
+int totalMovies = 0;
+MovieTuple_t *allMovies;
 
 
 int main(int argc, char **argv)
@@ -219,7 +221,6 @@ int main(int argc, char **argv)
 	unsigned short highestRating = 0,thisRating = 0;
 	char ***dataBuff;
 	char **tempKeys,**splitBuff;
-	int totalMovies = 0;
 
 	dataBuff = malloc(sizeof(char **) * MAX_COUNTRIES);
 	countryArray = malloc(sizeof(char *) * MAX_COUNTRIES);
@@ -333,6 +334,8 @@ int main(int argc, char **argv)
 		fclose(fMovie);
 		}
 	}
+	allMovies = malloc(sizeof(MovieTuple_t) * totalMovies);
+	collisions = malloc(sizeof(MovieTuple_t) * totalMovies);
 
 #ifdef DEBUG
 	printf("\nTotal Movies - %d ",totalMovies);
@@ -342,6 +345,23 @@ int main(int argc, char **argv)
 	{
 		actualWorkFunction(dataBuff[i],0,countryNumMovies[i]);
 	}
+	
+	//Free dataBuff. We dont need it anymore
+	for (i = 0; i < MAX_COUNTRIES; i++)
+	{
+		for (j = 0; j < LINES_PER_COUNTRY; j++)
+		{
+			free(dataBuff[i][j]);
+		}
+		free(dataBuff[i]);
+	}
+	for (i = 0; i < 8; i++)
+	{
+		free(splitBuff[i]);
+	}
+
+	free(splitBuff);
+	free(dataBuff);
 
 #ifdef DEBUG
 	printf("Years - ");
@@ -382,7 +402,7 @@ int main(int argc, char **argv)
 				{
 					if (collisions[k].bucketIndex == index)
 					{
-						printf("\n%s",collisions[k].tuple.line);
+						printf("\n%s",collisions[k].tuple->line);
 					}
 				}
 			}
@@ -429,34 +449,28 @@ int main(int argc, char **argv)
 			{
 				//For some reason same movie is being inserted.
 				////Handled upstream also;
-				if (strcmp(collisions[k].tuple.movieName,highestRatedMovie->movieName) != 0)
+				if (strcmp(collisions[k].tuple->movieName,highestRatedMovie->movieName) != 0)
 				{
-					printf("\n%s",collisions[k].tuple.line);
+					printf("\n%s",collisions[k].tuple->line);
 				}
 			}
 		}
 	}
 	printf("\n\n");
-	for (i = 0; i < 8; i++)
-	{
-		free(splitBuff[i]);
-	}
 	for (i = 0; i < MAX_COUNTRIES; i++)
 	{
 		free(countryArray[i]);
-		for (j = 0; j < LINES_PER_COUNTRY; j++)
-		{
-			free(dataBuff[i][j]);
-		}
-		free(dataBuff[i]);
 	}
-	free(splitBuff);
 	free(countryArray);
-	free(dataBuff);
 	free(tempKeys[0]);
 	free(tempKeys[1]);
 	free(tempKeys);
-
+	/*for ( i = 0; i < totalMovies; i++)
+	{
+		free(allMovies[i].line);
+	}*/
+	free(allMovies);
+	free(collisions);
 	return 0;
 }
 
@@ -490,7 +504,8 @@ int addToHashTable(myHashTable_t *table, char **keys, int numKeys,MovieTuple_t *
 			}
 			else if ( collisionBreaker(&table->entries[bucketIndex],ptr) == -1 && *numCollisions < 256 )
 			{
-				memcpy(&collisions[(*numCollisions)].tuple,ptr,sizeof(MovieTuple_t));
+				//memcpy(&collisions[(*numCollisions)].tuple,ptr,sizeof(MovieTuple_t));
+				collisions[(*numCollisions)].tuple = ptr;
 				collisions[(*numCollisions)].bucketIndex = bucketIndex;
 				(*numCollisions)++;
 			}
@@ -616,11 +631,11 @@ void sortYearReleases(short yearArray[64],short releasesInYear[64],int numYears)
 void actualWorkFunction(char **lineBuff,int start,int end)
 {
 	char **tempKeys;
-	MovieTuple_t tempTuple;
 	char **splitBuffer;
 	int yearIndex,index;
 	char tempBuff[MEDIUM_BUFFER_SIZE] = {'\0'};
 	int i;
+	static int movieCounter = 0;
 
 	tempKeys = malloc(sizeof(char *) * 2);
 	tempKeys[0] = malloc(sizeof(char) * 8);
@@ -641,42 +656,43 @@ void actualWorkFunction(char **lineBuff,int start,int end)
 		}
 		else
 		{
-			tempTuple.line = lineBuff[i];
-			strcpy(tempTuple.movieName,splitBuffer[0]);
-			tempTuple.movieVotes = (unsigned int) atoi(splitBuffer[1]);
-			tempTuple.movieRating = (unsigned short) atoi(splitBuffer[2]);
-			tempTuple.movieYear = (unsigned short) atoi(splitBuffer[3]);
-			strcpy(tempTuple.movieCountry,splitBuffer[4]);
+			allMovies[movieCounter].line = strdup(lineBuff[i]);
+			strcpy(allMovies[movieCounter].movieName,splitBuffer[0]);
+			allMovies[movieCounter].movieVotes = (unsigned int) atoi(splitBuffer[1]);
+			allMovies[movieCounter].movieRating = (unsigned short) atoi(splitBuffer[2]);
+			allMovies[movieCounter].movieYear = (unsigned short) atoi(splitBuffer[3]);
+			strcpy(allMovies[movieCounter].movieCountry,splitBuffer[4]);
 
 
-			sprintf(tempKeys[0],"%d",tempTuple.movieYear);
+			sprintf(tempKeys[0],"%d",allMovies[movieCounter].movieYear);
 
-			strcpy(tempKeys[1],tempTuple.movieCountry);
+			strcpy(tempKeys[1],allMovies[movieCounter].movieCountry);
 
-			index = shortArrayContains(globalYearArray,tempTuple.movieYear,numYears);
+			index = shortArrayContains(globalYearArray,allMovies[movieCounter].movieYear,numYears);
 			if (index == -1)
 			{
 				globalReleasesInYear[numYears] = 1;
-				globalYearArray[numYears++] = tempTuple.movieYear;
+				globalYearArray[numYears++] = allMovies[movieCounter].movieYear;
 			}
 			else
 			{
 				globalReleasesInYear[index]++;
 			}
-			index = arrayContains(countryArray,tempTuple.movieCountry,numCountries);
-			yearIndex = shortArrayContains(countryYearArray[index],tempTuple.movieYear,countryNumYears[index]);
+			index = arrayContains(countryArray,allMovies[movieCounter].movieCountry,numCountries);
+			yearIndex = shortArrayContains(countryYearArray[index],allMovies[movieCounter].movieYear,countryNumYears[index]);
 			if (yearIndex == -1)
 			{
 				countryReleasesInYear[index][countryNumYears[index]] = 1;
-				countryYearArray[index][countryNumYears[index]] = tempTuple.movieYear;
+				countryYearArray[index][countryNumYears[index]] = allMovies[movieCounter].movieYear;
 				countryNumYears[index]++;
 			}
 			else
 			{
 				countryReleasesInYear[index][yearIndex]++;
 			}
-			addToHashTable(&hashTable,tempKeys,2,&tempTuple,&collisions,&numCollisions);
+			addToHashTable(&hashTable,tempKeys,2,&allMovies[movieCounter],collisions,&numCollisions);
 		}
+		movieCounter++;
 	}
 	for (i = 0; i < 8; i++)
 	{
@@ -687,3 +703,27 @@ void actualWorkFunction(char **lineBuff,int start,int end)
 	free(tempKeys[1]);
 	free(tempKeys);
 }
+
+int __test_and_set(int *mutex)
+{
+	return atomicCAS(mutex,0,1);
+}
+
+int __test_test_and_set(int *mutex);
+
+int mycuda_mutex_lock(int *lock)
+{
+	// Check the test_test_and_set value.
+	// returns -1 if mutex value is LOCKED
+	int status = __test_test_and_set(mutex);
+	while (status == -1){
+		// If locked, wait on mutex to become unlocked.
+	}
+	else if(status == 0)
+	{
+		// The test_test_and_set returns 0 when the lcok was previously
+		// not set and now it is set. i.e. lock has been acquired.
+		return 0;
+	}
+}
+
