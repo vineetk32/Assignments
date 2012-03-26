@@ -1,0 +1,22 @@
+Output explanation:
+Outputs should be country-wise.
+USA is listed first in the countries file and then India and then China.
+Within USA, 2009 has most entries.
+So phase-1 output will have 2009-USA then so on with decreasing number of movies per year.
+Same format is followed for other countries.
+India has most movis from 1999 and then from 2009 etc.
+
+Execution Flow:
+So you will read countries file, deduce that there are 3 countries.
+Read all the input files and put the lines read in country-specific buffers.
+You will have 3 buffers at the end.
+Then, you will invoke (maybe) 15 threads (5 on each buffer)
+These threads will input data in a single global hash table and will use the atomic operations for updation.
+It will display the output and finally the overall top rated movies.
+
+Note:
+** Please make sure your output matches exactly with the sample output.
+So country name, then colon, newline, year, colon, number of movies and then movies on newlines.
+An extra newline between country outputs and the final output as well.
+Please ensure your output conforms to this format. **
+
