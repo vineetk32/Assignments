@@ -540,7 +540,7 @@ int addToHashTable(myHashTable_t *table, char **keys, int numKeys,MovieTuple_t *
 			{
 				memcpy(table->entries[bucketIndex].ptr,ptr,sizeof(MovieTuple_t));
 			}
-			else if ( collisionBreaker(&table->entries[bucketIndex],ptr) == -1)
+			else if ( collisionBreaker(&table->entries[bucketIndex],ptr) == -1 && *numCollisions < 256 )
 			{
 				memcpy(&collisions[(*numCollisions)].tuple,ptr,sizeof(MovieTuple_t));
 				collisions[(*numCollisions)].bucketIndex = bucketIndex;
