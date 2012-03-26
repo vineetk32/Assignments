@@ -4,8 +4,6 @@
 #include <stdarg.h>
 #include <string.h>
 #include <time.h>
-#include <pthread.h>
-#include "myatomic.h"
 
 #define BUCKET_SIZE 512
 #define MICRO_BUFFER_SIZE 32
@@ -49,13 +47,6 @@ typedef struct collidedEntry
 	MovieTuple_t tuple;
 	unsigned int bucketIndex;
 } collidedEntry_t;
-
-typedef struct threadPackage
-{
-	int start,end;
-	char **lineBuff;
-	pthread_mutex_t *mutex;
-} threadPackage_t;
 
 typedef struct myHashTable
 {
@@ -184,7 +175,7 @@ void initHashTable(myHashTable_t *table);
 int collisionBreaker(myHashEntry_t *entry1,MovieTuple_t *movieTuple);
 void sortYearReleases(short yearArray[64],short releasesInYear[64],int numYears);
 
-void actualWorkFunction(char **lineBuff,int start,int end,pthread_mutex_t *mutex);
+void actualWorkFunction(char **lineBuff,int start,int end);
 
 
 //#define DEBUG
@@ -212,14 +203,7 @@ myHashTable_t hashTable;
 
 collidedEntry_t collisions[256];
 int numCollisions = 0;
-pthread_mutex_t tableMutex;
 
-void *threadFunc(void *args)
-{
-	threadPackage_t *package = (threadPackage_t *) args;
-	actualWorkFunction(package->lineBuff,package->start,package->end,package->mutex);
-	return NULL;
-}
 
 int main(int argc, char **argv)
 {
@@ -237,10 +221,6 @@ int main(int argc, char **argv)
 	char **tempKeys,**splitBuff;
 	int totalMovies = 0;
 
-	pthread_t workerThreads[MAX_COUNTRIES * 2];
-	threadPackage_t packages[MAX_COUNTRIES * 2];
-
-
 	dataBuff = malloc(sizeof(char **) * MAX_COUNTRIES);
 	countryArray = malloc(sizeof(char *) * MAX_COUNTRIES);
 	for (i = 0; i< MAX_COUNTRIES; i++)
@@ -256,7 +236,6 @@ int main(int argc, char **argv)
 	}
 
 	initHashTable(&hashTable);
-	pthread_mutex_init(&tableMutex,NULL);
 
 #ifdef DEBUG
 	systemLogLevel = VDEBUG;
@@ -359,42 +338,11 @@ int main(int argc, char **argv)
 	printf("\nTotal Movies - %d ",totalMovies);
 #endif
 
-	/*for (i = 0; i < numCountries;i++)
+	for (i = 0; i < numCountries;i++)
 	{
 		actualWorkFunction(dataBuff[i],0,countryNumMovies[i]);
-	}*/
-	//Two threads per country
-	j = 0;
-	for (i = 0; i < numCountries; i++)
-	{
-		packages[j].start = 0;
-		packages[j].end = countryNumMovies[i] / 2;
-		packages[j].lineBuff = dataBuff[i];
-		packages[j].mutex = &tableMutex;
-		pthread_create(&workerThreads[j],NULL,threadFunc,(void *)&packages[j]);
-#ifdef DEBUG
-	printf("\nThread %d: Start:%d, End:%d, Country:%d",j,packages[j].start,packages[j].end,i);
-#endif
-		j++;
-		packages[j].start = packages[j-1].end;
-		packages[j].end = countryNumMovies[i];
-		packages[j].lineBuff = dataBuff[i];
-		packages[j].mutex = &tableMutex;
-		pthread_create(&workerThreads[j],NULL,threadFunc,(void *)&packages[j]);
-
-#ifdef DEBUG
-	printf("\nThread %d: Start:%d, End:%d",j,packages[j].start,packages[j].end);
-#endif
-		j++;
 	}
 
-	//sleep(5);
-	j = 0;
-	for (i = 0; i < numCountries; i++)
-	{
-		pthread_join(workerThreads[j++],NULL);
-		pthread_join(workerThreads[j],NULL);
-	}
 #ifdef DEBUG
 	printf("Years - ");
 	for (i = 0; i < numYears; i++)
@@ -665,7 +613,7 @@ void sortYearReleases(short yearArray[64],short releasesInYear[64],int numYears)
 	}
 }
 
-void actualWorkFunction(char **lineBuff,int start,int end,pthread_mutex_t *mutex)
+void actualWorkFunction(char **lineBuff,int start,int end)
 {
 	char **tempKeys;
 	MovieTuple_t tempTuple;
@@ -727,9 +675,7 @@ void actualWorkFunction(char **lineBuff,int start,int end,pthread_mutex_t *mutex
 			{
 				countryReleasesInYear[index][yearIndex]++;
 			}
-			pthread_mutex_lock(mutex);
 			addToHashTable(&hashTable,tempKeys,2,&tempTuple,&collisions,&numCollisions);
-			pthread_mutex_unlock(mutex);
 		}
 	}
 	for (i = 0; i < 8; i++)
