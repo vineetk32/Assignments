@@ -53,11 +53,50 @@ typedef struct myHashTable
 	myHashEntry_t entries[BUCKET_SIZE];
 }myHashTable_t;
 
+#define MUTEX_LOCKED 1
+#define MUTEX_UNLOCKED 0
+
 #ifdef _WIN32
 #define my_strtok strtok_s
 #else
 #define my_strtok strtok_r
 #endif
+int __test_and_set(int *mutex)
+{
+//	return atomicCAS(mutex,0,1);
+}
+
+int __test_test_and_set(int *mutex)
+{
+	// Test and set call. 100 tries.
+	int counter = 100;
+	while (counter > 0)
+	{
+		while (*mutex == MUTEX_LOCKED);
+		if (__test_and_set(mutex)  == MUTEX_UNLOCKED)
+		{
+			return 0;
+		}
+		counter--;
+	}
+	return -1;
+}
+
+int mycuda_mutex_lock(int *lock)
+{
+	// Check the test_test_and_set value.
+	// returns -1 if mutex valu* is LOCKED
+	int status = __test_test_and_set(lock);
+	while (status == -1){
+		// If locked, wait on mutex to become unlocked.
+	}
+	if(status == 0)
+	{
+		// The test_test_and_set returns 0 when the lcok was previously
+		// not set and now it is set. i.e. lock has been acquired.
+		return 0;
+	}
+}
 
 int splitLine(const char *in, char **out,const char *delim)
 {
@@ -410,13 +449,14 @@ int main(int argc, char **argv)
 	}
 	printf("\n");
 	sortYearReleases(globalYearArray,globalReleasesInYear,numYears);
-
+	
 	//Output Phase2 - top rated movies per year across countries.
 	for(i = 0; i < numYears;i++)
 	{
 		sprintf(tempKeys[0],"%d",globalYearArray[i]);
 		//tempEntry->keys[0] = tempBuff;
 		highestRating = 0;
+		printf("\n%d:%d:",globalYearArray[i],globalReleasesInYear[i]);
 		for(j = 0; j < numCountries;j++)
 		{
 			strcpy(tempKeys[1],countryArray[j]);
@@ -437,24 +477,23 @@ int main(int argc, char **argv)
 						highestRatedMovie = ((MovieTuple_t *)tempEntry->ptr);
 					}
 				}
+				printf("\n%s",highestRatedMovie->line);
 			}
-		}
-		printf("\n%d:%d:",globalYearArray[i],globalReleasesInYear[i]);
-		//printf("\n%s:%d:%d:%s",highestRatedMovie->movieName,highestRatedMovie->movieVotes,highestRatedMovie->movieRating,highestRatedMovie->movieCountry);
-		printf("\n%s",highestRatedMovie->line);
-		//Check collided Entries also
-		for (k = 0 ; k < numCollisions;k++)
-		{
-			if (collisions[k].bucketIndex == index)
+			//Check collided Entries also
+			for (k = 0 ; k < numCollisions;k++)
 			{
-				//For some reason same movie is being inserted.
-				////Handled upstream also;
-				if (strcmp(collisions[k].tuple->movieName,highestRatedMovie->movieName) != 0)
+				if (collisions[k].bucketIndex == index)
 				{
-					printf("\n%s",collisions[k].tuple->line);
+					//For some reason same movie is being inserted.
+					////Handled upstream also;
+					if (strcmp(collisions[k].tuple->movieName,highestRatedMovie->movieName) != 0)
+					{
+						printf("\n%s",collisions[k].tuple->line);
+					}
 				}
 			}
 		}
+		//printf("\n%s:%d:%d:%s",highestRatedMovie->movieName,highestRatedMovie->movieVotes,highestRatedMovie->movieRating,highestRatedMovie->movieCountry);
 	}
 	printf("\n\n");
 	for (i = 0; i < MAX_COUNTRIES; i++)
@@ -501,13 +540,15 @@ int addToHashTable(myHashTable_t *table, char **keys, int numKeys,MovieTuple_t *
 			if ( collisionBreaker(&table->entries[bucketIndex],ptr) == 1)
 			{
 				memcpy(table->entries[bucketIndex].ptr,ptr,sizeof(MovieTuple_t));
+				writeLog(__func__,VINFO,systemLogLevel,"Replacing entry in HashTable.");
 			}
-			else if ( collisionBreaker(&table->entries[bucketIndex],ptr) == -1 && *numCollisions < 256 )
+			else if ( collisionBreaker(&table->entries[bucketIndex],ptr) == -1 && *numCollisions < totalMovies )
 			{
 				//memcpy(&collisions[(*numCollisions)].tuple,ptr,sizeof(MovieTuple_t));
 				collisions[(*numCollisions)].tuple = ptr;
 				collisions[(*numCollisions)].bucketIndex = bucketIndex;
 				(*numCollisions)++;
+				writeLog(__func__,VINFO,systemLogLevel,"Adding entry to collision list at %d.",*numCollisions);
 			}
 			return 0;
 		}
@@ -704,26 +745,4 @@ void actualWorkFunction(char **lineBuff,int start,int end)
 	free(tempKeys);
 }
 
-int __test_and_set(int *mutex)
-{
-	return atomicCAS(mutex,0,1);
-}
-
-int __test_test_and_set(int *mutex);
-
-int mycuda_mutex_lock(int *lock)
-{
-	// Check the test_test_and_set value.
-	// returns -1 if mutex value is LOCKED
-	int status = __test_test_and_set(mutex);
-	while (status == -1){
-		// If locked, wait on mutex to become unlocked.
-	}
-	else if(status == 0)
-	{
-		// The test_test_and_set returns 0 when the lcok was previously
-		// not set and now it is set. i.e. lock has been acquired.
-		return 0;
-	}
-}
 
