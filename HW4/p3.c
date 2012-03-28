@@ -62,7 +62,7 @@ typedef struct myHashTable
 #define my_strtok strtok_r
 #endif
 
-#define DEBUG
+//#define DEBUG
 
 #ifdef _WIN32
 #define __func__ __FUNCTION__
@@ -184,7 +184,6 @@ int splitLine(const char *in, char **out,const char *delim)
 	return i;
 
 }
-
 int arrayContains(const char **array, const char *element, int arrayLen)
 {
 	int i;
@@ -198,6 +197,7 @@ int arrayContains(const char **array, const char *element, int arrayLen)
 	return -1;
 }
 
+//__device__ int arrayContains(const char **array, const char *element, int arrayLen)
 int shortArrayContains(short *array, short element, int arrayLen)
 {
 	int i;
@@ -574,15 +574,45 @@ int main(int argc, char **argv)
 
 	memcpy(cudaGlobalReleasesInYear,globalReleasesInYear,sizeof(short) * numYears);
 	//CUDA_CALL(cudaGlobalReleasesInYear,globalReleasesInYear,sizeof(short) * numYears, cudaMemcpyHostToDevice));
-
+		threadShare = totalMovies / (BLOCKS_PER_GRID * THREADS_PER_BLOCK) + 1;
 	for (i = 0; i < BLOCKS_PER_GRID; i++)
 	{
-		threadShare = totalMovies / (BLOCKS_PER_GRID * THREADS_PER_BLOCK);
-		for (j = 0; j < THREADS_PER_BLOCK; j++)
+		for (j = 1; j <= THREADS_PER_BLOCK; j++)
 		{
 			cudaSim(i,1,j,threadShare);
 		}
 	}
+
+	//Copy everything back in place
+	memcpy(allMovies,cudaAllMovies,sizeof(MovieTuple_t) * totalMovies);
+	//CUDA_CALL(cudaMemcpy(allMovies,cudaAllMovies,sizeof(MovieTuple_t) * totalMovies, cudaMemcpyDeviceToHost));
+
+	memcpy(&hashTable,cudaHashTable,sizeof(myHashTable_t));
+	//CUDA_CALL(cudaMemcpy(&hashTable,cudaHashTable, sizeof(myHashTable_t), cudaMemcpyDeviceToHost));
+
+	memcpy(cudaCollisions,collisions,sizeof(collidedEntry_t) * totalMovies);
+	//CUDA_CALL(cudaMemcpy(collisions,cudaCollisions, sizeof(collidedEntry_t) * totalMovies, cudaMemcpyDeviceToHost));
+
+	for ( i = 0 ; i < numCountries; i++)
+	{
+		memcpy(countryArray[i],cudaCountryArray[i],sizeof(char) * 32);
+		//CUDA_CALL(cudaMemcpy(countryArray[i],cudaCountryArray[i],sizeof(char) * 32, cudaMemcpyDeviceToHost));
+		memcpy(countryYearArray[i],cudaCountryYearArray[i],sizeof(short) * numYears);
+		//CUDA_CALL(cudaMemcpy(countryYearArray[i],cudaCountryYearArray[i],sizeof(char) * numYears, cudaMemcpyDeviceToHost));
+		memcpy(countryArray[i],cudaCountryArray[i],sizeof(short) * numYears);
+		//CUDA_CALL(cudaMemcpy(countryArray[i],cudaCountryArray[i],sizeof(char) * numYears, cudaMemcpyDeviceToHost));
+		memcpy(countryReleasesInYear[i],cudaCountryReleasesInYear[i],sizeof(short) * numYears);
+		//CUDA_CALL(cudaMemcpy(countryReleasesInYear[i],cudaCountryReleasesInYear[i],sizeof(char) * numCountries, cudaMemcpyDeviceToHost));
+	}
+
+	memcpy(countryNumYears,cudaCountryNumYears,sizeof(int) * numCountries);
+	//CUDA_CALL(cudaMemcpy(countryNumYears,cudaCountryNumYears,sizeof(int) * numCountries, cudaMemcpyDeviceToHost));
+
+	memcpy(globalYearArray,cudaGlobalYearArray,sizeof(short) * numYears);
+	//CUDA_CALL(cudaMemcpy(globalYearArray,cudaGlobalYearArray,sizeof(short) * numYears, cudaMemcpyDeviceToHost));
+
+	memcpy(globalReleasesInYear,cudaGlobalReleasesInYear,sizeof(short) * numYears);
+	//CUDA_CALL(globalReleasesInYear,cudaGlobalReleasesInYear,sizeof(short) * numYears, cudaMemcpyDeviceToHost));
 
 	tempKeys = malloc(sizeof(char *) * 2);
 	tempKeys[0] = malloc(sizeof(char) * 8);
@@ -721,10 +751,12 @@ int addToHashTable(myHashTable_t *table, char keys[2][SMALL_BUFFER_SIZE], int nu
 	{
 		writeLog(__func__,VINFO,systemLogLevel,"Collision for keys %s%s and %s%s. (%d)",table->entries[bucketIndex].keys[0],table->entries[bucketIndex].keys[1],keys[0],keys[1],bucketIndex);
 
-		if (strcmp(((MovieTuple_t *)(table->entries[bucketIndex].ptr))->movieName,ptr->movieName) != 0)
+		if (cudastrcmp(((MovieTuple_t *)(table->entries[bucketIndex].ptr))->movieName,ptr->movieName) != 0)
+		//if (strcmp(((MovieTuple_t *)(table->entries[bucketIndex].ptr))->movieName,ptr->movieName) != 0)
 		{
 			if ( collisionBreaker(&table->entries[bucketIndex],ptr) == 1)
 			{
+				//cudaMemcpy(table->entries[bucketIndex].ptr,ptr,sizeof(MovieTuple_t),cudaMemcpyDeviceToDevice);
 				memcpy(table->entries[bucketIndex].ptr,ptr,sizeof(MovieTuple_t));
 				writeLog(__func__,VINFO,systemLogLevel,"Replacing entry in HashTable.");
 			}
@@ -747,9 +779,12 @@ int addToHashTable(myHashTable_t *table, char keys[2][SMALL_BUFFER_SIZE], int nu
 		table->entries[bucketIndex].keys[0] = (char *)  malloc (sizeof(char) * 8);
 		table->entries[bucketIndex].keys[1] = (char *) malloc (sizeof(char) * 64);
 		strcpy(table->entries[bucketIndex].keys[0],keys[0]);
+		//cudastrcpy(table->entries[bucketIndex].keys[0],keys[0]);
 		strcpy(table->entries[bucketIndex].keys[1],keys[1]);
+		//cudastrcpy(table->entries[bucketIndex].keys[1],keys[1]);
 		table->entries[bucketIndex].ptr = malloc(sizeof(MovieTuple_t));
 		memcpy(table->entries[bucketIndex].ptr,ptr,sizeof(MovieTuple_t));
+		cudaMemcpy(table->entries[bucketIndex].ptr,ptr,sizeof(MovieTuple_t),cudaMemcpyDeviceToDevice);
 	}
 	return 0;
 }
@@ -902,8 +937,11 @@ void cudaSim(int blockIdxx,int blockDimx, int threadIDx,int totalLines)
 	char tempKeys[2][SMALL_BUFFER_SIZE] = {'\0'};
 	int index = 0, yearIndex = 0,i;
 	int start,end;
+	static int threadID = 0;
 
-	start = blockIdxx * blockDimx + threadIDx;
+	threadID++;
+	//threadID = blockIdxx * blockDimx + threadIDx;
+	start = threadID * totalLines;
 	if ( (start + totalLines) < totalMovies)
 	{
 		end = start + totalLines;
@@ -912,7 +950,9 @@ void cudaSim(int blockIdxx,int blockDimx, int threadIDx,int totalLines)
 	{
 		end = totalMovies;
 	}
-	for (i = blockIdxx * blockDimx + threadIDx; i < blockIdxx * blockDimx + threadIDx + totalLines; i++)
+	printf("\nThread %d: Start: %d, End: %d",threadID,start,end);
+
+	for (i = start; i < end; i++)
 	{
 		sprintf(tempKeys[0],"%d",cudaAllMovies[i].movieYear);
 		strcpy(tempKeys[1],cudaAllMovies[i].movieCountry);
@@ -928,6 +968,7 @@ void cudaSim(int blockIdxx,int blockDimx, int threadIDx,int totalLines)
 			cudaGlobalReleasesInYear[index]++;
 		}
 		index = arrayContains(cudaCountryArray,cudaAllMovies[i].movieCountry,numCountries);
+		//index = cudaArrayContains(cudaCountryArray,cudaAllMovies[i].movieCountry,numCountries);
 		yearIndex = shortArrayContains(cudaCountryYearArray[index],cudaAllMovies[i].movieYear,cudaCountryNumYears[index]);
 		if (yearIndex == -1)
 		{
@@ -939,7 +980,7 @@ void cudaSim(int blockIdxx,int blockDimx, int threadIDx,int totalLines)
 		{
 			cudaCountryReleasesInYear[index][yearIndex]++;
 		}
-		printf("\nDone with %d",i);
+		//printf("\nDone with %d",i);
 		addToHashTable(cudaHashTable,tempKeys,2,&allMovies[i],collisions,&numCollisions);
 	}
 }
