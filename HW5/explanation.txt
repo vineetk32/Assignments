@@ -1,0 +1,28 @@
+Input file in.txt contains 4 files. (do not hardcode in.txt in your program as name of input file)
+These four files contain preprocessed data - raw words separated by whitespace - no special characters.
+corpus.txt contains two words - cricket and england
+
+cricket appears 12 times in File1, 3 times in File2, 3 times in File3 and 12 times in File4
+england appears 3 times in File1, 3 times in File2, 1 time in File3 and 1 time in File4
+So TF of cricket is 12+3+3+12=30 and DF of cricket is 4
+TF of england is 3+3+1+1=8 and DF of england is 4 
+
+Say you have given one file to CPU and three to GPU, you will need to merge the hash tables at the end to get TF and DF
+
+The first part of the output will print one line for each corpus token as follows - 
+corpus token text:TF:DF:
+
+The total number of words 355+109+195+181=840
+The next line should be total number of words and total number of documents.
+
+The output will be as following - 
+
+$ ./a3 in.txt corpus.txt
+cricket:30:4:
+england:8:4:
+840:4:
+cricket:0.035714286
+england:0.00952381
+CPUTime:<cputime-goes-here>
+GPUTime:<gputime-goes-here>
+
