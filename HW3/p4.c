@@ -46,7 +46,7 @@ typedef struct myHashEntry
 
 typedef struct collidedEntry
 {
-	MovieTuple_t tuple;
+	MovieTuple_t *tuple;
 	unsigned int bucketIndex;
 } collidedEntry_t;
 
@@ -217,7 +217,7 @@ short globalYearArray[64];
 short globalReleasesInYear[64];
 myHashTable_t hashTable;
 
-collidedEntry_t collisions[256];
+collidedEntry_t collisions[512];
 int numCollisions = 0;
 pthread_mutex_t tableMutex;
 
@@ -456,6 +456,7 @@ int main(int argc, char **argv)
 		sprintf(tempKeys[0],"%d",globalYearArray[i]);
 		//tempEntry->keys[0] = tempBuff;
 		highestRating = 0;
+		printf("\n%d:%d:",globalYearArray[i],globalReleasesInYear[i]);
 		for(j = 0; j < numCountries;j++)
 		{
 			strcpy(tempKeys[1],countryArray[j]);
@@ -468,29 +469,28 @@ int main(int argc, char **argv)
 				{
 					highestRatedMovie = ((MovieTuple_t *)tempEntry->ptr);
 					highestRating = highestRatedMovie->movieRating;
+					highestBucketIndex = index;
 				}
 				else if ( ((MovieTuple_t *)tempEntry->ptr)->movieRating == highestRating)
 				{
 					if ( ((MovieTuple_t *)tempEntry->ptr)->movieVotes > highestRatedMovie->movieVotes)
 					{
 						highestRatedMovie = ((MovieTuple_t *)tempEntry->ptr);
+						highestBucketIndex = index;
 					}
 				}
 			}
 		}
-		printf("\n%d:%d:",globalYearArray[i],globalReleasesInYear[i]);
-		//printf("\n%s:%d:%d:%s",highestRatedMovie->movieName,highestRatedMovie->movieVotes,highestRatedMovie->movieRating,highestRatedMovie->movieCountry);
 		printf("\n%s",highestRatedMovie->line);
-		//Check collided Entries also
 		for (k = 0 ; k < numCollisions;k++)
 		{
-			if (collisions[k].bucketIndex == index)
+			if (collisions[k].bucketIndex == highestBucketIndex)
 			{
 				//For some reason same movie is being inserted.
 				////Handled upstream also;
-				if (strcmp(collisions[k].tuple.movieName,highestRatedMovie->movieName) != 0)
+				if (strcmp(collisions[k].tuple->movieName,highestRatedMovie->movieName) != 0)
 				{
-					printf("\n%s",collisions[k].tuple.line);
+					printf("\n%s",collisions[k].tuple->line);
 				}
 			}
 		}

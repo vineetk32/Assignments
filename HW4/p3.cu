@@ -25,7 +25,7 @@
 #define my_strtok strtok_r
 #endif
 
-#define DEBUG
+//#define DEBUG
 
 #ifdef _WIN32
 #define __func__ __FUNCTION__
@@ -69,7 +69,7 @@ typedef struct MovieTuple
 	unsigned short movieRating;
 	unsigned short movieYear;
 	char movieCountry[MICRO_BUFFER_SIZE];
-	char *line;
+	char line[SMALL_BUFFER_SIZE];
 } MovieTuple_t;
 
 
@@ -85,14 +85,14 @@ enum VLOGLEVEL
 
 typedef struct myHashEntry
 {
-	char **keys;
-	void *ptr;
+	char keys[2][MICRO_BUFFER_SIZE];
+	MovieTuple_t ptr;
 	int numKeys;
 }myHashEntry_t;
 
 typedef struct collidedEntry
 {
-	MovieTuple_t *tuple;
+	MovieTuple_t tuple;
 	unsigned int bucketIndex;
 } collidedEntry_t;
 
@@ -124,6 +124,7 @@ unsigned int getFromHashTable(myHashTable_t *table, char **keys, int numKeys);
 unsigned int hashFunction(unsigned int seed,char *key);
 void printHashTable(myHashTable_t *table);
 void initHashTable(myHashTable_t *table);
+void initCollisionTable(collidedEntry_t *table,int len);
 int collisionBreaker(myHashEntry_t *entry1,MovieTuple_t *movieTuple);
 void sortYearReleases(short yearArray[64],short releasesInYear[64],int numYears);
 void actualWorkFunction(char **lineBuff,int start,int end);
@@ -351,7 +352,7 @@ __global__ void threadFunc(int totalLines,int totalMovies,int numCountries,Movie
 	
 
 	//threadID++;
-	*cudaNumYears = 0;
+	//*cudaNumYears = 0;
 	*cudaCountryNumYears = 0;
 	threadID = blockDim.x * blockIdx.x + threadIdx.x;
 	start = threadID * totalLines;
@@ -377,7 +378,8 @@ __global__ void threadFunc(int totalLines,int totalMovies,int numCountries,Movie
 			if (index == -1)
 			{
 				cudaGlobalReleasesInYear[*cudaNumYears] = 1;
-				cudaGlobalYearArray[(*cudaNumYears)++] = cudaAllMovies[i].movieYear;
+				cudaGlobalYearArray[*cudaNumYears] = cudaAllMovies[i].movieYear;
+				(*cudaNumYears)++;
 			}
 			else
 			{
@@ -570,6 +572,7 @@ int main(int argc, char **argv)
 	}
 	allMovies = (MovieTuple_t *) malloc (sizeof(MovieTuple_t) * totalMovies);
 	collisions = (collidedEntry_t *) malloc(sizeof(collidedEntry_t) * totalMovies);
+	initCollisionTable(collisions,totalMovies);
 
 #ifdef DEBUG
 	printf("\nTotal Movies - %d ",totalMovies);
@@ -645,6 +648,8 @@ int main(int argc, char **argv)
 	//cudaCountryNumYears = (int *) malloc(sizeof(int) * numCountries);
 	numYears = (int *) malloc(sizeof(int));
 	numCollisions = (int *) malloc(sizeof(int));
+	*numCollisions = 0;
+	*numYears = 0;
 	CUDA_CALL(cudaMalloc((void **)&cudaCountryNumYears, sizeof(int)));
 	CUDA_CALL(cudaMalloc((void **)&cudaNumYears, sizeof(int)));
 	CUDA_CALL(cudaMalloc((void **)&cudaNumCollisions, sizeof(int)));
@@ -692,24 +697,28 @@ int main(int argc, char **argv)
 	//cudaNumCollisions = numCollisions;
 	//threadFunc<<<1,1>>>(threadShare,totalMovies,numCountries);
 	CUDA_CALL(cudaMemset(cudaNumCollisions,0,1));
+	CUDA_CALL(cudaMemset(cudaNumYears,0,1));
 	for ( i = 0 ; i < numCountries; i++)
 	{
+		printf("\nNow covering %s",countryArray[i]);
 		CUDA_CALL(cudaMemcpy(cudaCountryArray,countryArray[i],sizeof(char) * 32, cudaMemcpyHostToDevice));
 		CUDA_CALL(cudaMemset(cudaCountryYearArray,0,64));
 		CUDA_CALL(cudaMemset(cudaCountryReleasesInYear,0,64));
+		CUDA_CALL(cudaMemcpy(cudaNumYears,numYears,sizeof(int), cudaMemcpyHostToDevice));
+		CUDA_CALL(cudaMemcpy(cudaNumCollisions,numCollisions,sizeof(int), cudaMemcpyHostToDevice));
 		//CUDA_CALL(cudaMemcpy(cudaCountryNumYears,countryNumYears[i],sizeof(int), cudaMemcpyHostToDevice));
 		
 		threadFunc<<<1,1>>>(threadShare,totalMovies,numCountries,cudaAllMovies,cudaGlobalReleasesInYear,cudaGlobalYearArray,cudaCountryArray,cudaCountryYearArray,cudaCountryNumYears,cudaCountryReleasesInYear,cudaHashTable,cudaCollisions,cudaNumYears,cudaNumCollisions);
 	
 		CUDA_CALL(cudaMemcpy(numYears,cudaNumYears,sizeof(int), cudaMemcpyDeviceToHost));
+		CUDA_CALL(cudaMemcpy(numCollisions,cudaNumCollisions,sizeof(int), cudaMemcpyDeviceToHost));
 
-		CUDA_CALL(cudaMemcpy(countryYearArray[i],cudaCountryYearArray,sizeof(short) * *numYears, cudaMemcpyDeviceToHost));
-		CUDA_CALL(cudaMemcpy(countryReleasesInYear[i],cudaCountryReleasesInYear,sizeof(short) * *numYears, cudaMemcpyDeviceToHost));
 		CUDA_CALL(cudaMemcpy(&countryNumYears[i],cudaCountryNumYears,sizeof(int), cudaMemcpyDeviceToHost));
+		CUDA_CALL(cudaMemcpy(countryYearArray[i],cudaCountryYearArray,sizeof(short) * countryNumYears[i], cudaMemcpyDeviceToHost));
+		CUDA_CALL(cudaMemcpy(countryReleasesInYear[i],cudaCountryReleasesInYear,sizeof(short) * countryNumYears[i], cudaMemcpyDeviceToHost));
+		
 	}
 	
-	CUDA_CALL(cudaMemcpy(numCollisions,cudaNumCollisions,sizeof(int), cudaMemcpyDeviceToHost));
-	CUDA_CALL(cudaMemcpy(numYears,cudaNumYears,sizeof(int), cudaMemcpyDeviceToHost));
 	//Copy everything back in place
 	//memcpy(allMovies,cudaAllMovies,sizeof(MovieTuple_t) * totalMovies);
 	//CUDA_CALL(cudaMemcpy(allMovies,cudaAllMovies,sizeof(MovieTuple_t) * totalMovies, cudaMemcpyDeviceToHost));
@@ -761,11 +770,11 @@ int main(int argc, char **argv)
 		printf("\n\n%s:",countryArray[i]);
 		sortYearReleases(countryYearArray[i],countryReleasesInYear[i],countryNumYears[i]);
 
-		for (j = 0; j < countryNumYears[i]; j++)
+		for (j = 0; j < *numYears; j++)
 		{
-			printf("\n%d:%d",countryYearArray[i][j],countryReleasesInYear[i][j]);
+			//printf("\n%d:%d",countryYearArray[i][j],countryReleasesInYear[i][j]);
 
-			sprintf(tempKeys[0],"%d",countryYearArray[i][j]);
+			sprintf(tempKeys[0],"%d",globalYearArray[j]);
 			strcpy(tempKeys[1],countryArray[i]);
 			index = getFromHashTable(&hashTable,tempKeys,2);
 			if (index > BUCKET_SIZE)
@@ -775,13 +784,16 @@ int main(int argc, char **argv)
 			else
 			{
 				tempEntry = &(hashTable.entries[index]);
-				printf("\n%s",((MovieTuple_t *)tempEntry->ptr)->line);
+				printf("\n%d:%d",globalYearArray[j],countryReleasesInYear[i][j]);
+				printf("\n%s",(tempEntry->ptr.line));
 				//Check collided Entries also
 				for (k = 0 ; k < *numCollisions;k++)
 				{
+					if (k > totalMovies)
+						break;
 					if (collisions[k].bucketIndex == index)
 					{
-						printf("\n%s",collisions[k].tuple->line);
+						printf("\n%s",collisions[k].tuple.line);
 					}
 				}
 			}
@@ -805,17 +817,17 @@ int main(int argc, char **argv)
 			if (index < BUCKET_SIZE)
 			{
 				tempEntry = &(hashTable.entries[index]);
-				if ( ((MovieTuple_t *)tempEntry->ptr)->movieRating > highestRating)
+				if  (tempEntry->ptr.movieRating > highestRating)
 				{
-					highestRatedMovie = ((MovieTuple_t *)tempEntry->ptr);
+					highestRatedMovie = &tempEntry->ptr;
 					highestRating = highestRatedMovie->movieRating;
 					highestBucketIndex = index;
 				}
-				else if ( ((MovieTuple_t *)tempEntry->ptr)->movieRating == highestRating)
+				else if ( tempEntry->ptr.movieRating == highestRating)
 				{
-					if ( ((MovieTuple_t *)tempEntry->ptr)->movieVotes > highestRatedMovie->movieVotes)
+					if ( tempEntry->ptr.movieVotes > highestRatedMovie->movieVotes)
 					{
-						highestRatedMovie = ((MovieTuple_t *)tempEntry->ptr);
+						highestRatedMovie = &tempEntry->ptr;
 						highestBucketIndex = index;
 					}
 				}
@@ -826,13 +838,17 @@ int main(int argc, char **argv)
 		printf("\n%s",highestRatedMovie->line);
 		for (k = 0 ; k < *numCollisions;k++)
 		{
-			if (collisions[k].bucketIndex == highestBucketIndex)
+			if (k > totalMovies)
+			{
+				break;
+			}
+			else if (collisions[k].bucketIndex == highestBucketIndex)
 			{
 				//For some reason same movie is being inserted.
 				////Handled upstream also;
-				if (strcmp(collisions[k].tuple->movieName,highestRatedMovie->movieName) != 0)
+				if (strcmp(collisions[k].tuple.movieName,highestRatedMovie->movieName) != 0)
 				{
-					printf("\n%s",collisions[k].tuple->line);
+					printf("\n%s",collisions[k].tuple.line);
 				}
 			}
 		}
@@ -880,6 +896,14 @@ void initHashTable(myHashTable_t *table)
 	}
 }
 
+void initCollisionTable(collidedEntry_t *table,int len)
+{
+	int i;
+	for (i = 0; i < len; i++)
+	{
+		table[i].bucketIndex = -1;
+	}
+}
 __device__ int addToHashTable(myHashTable_t *table, char keys[2][SMALL_BUFFER_SIZE], int numKeys,MovieTuple_t *ptr,collidedEntry_t *collisions,int *numCollisions,int totalMovies)
 //int addToHashTable(myHashTable_t *table, char keys[2][SMALL_BUFFER_SIZE], int numKeys,MovieTuple_t *ptr,collidedEntry_t *collisions,int *numCollisions)
 {
@@ -896,19 +920,19 @@ __device__ int addToHashTable(myHashTable_t *table, char keys[2][SMALL_BUFFER_SI
 	{
 		//writeLog(__func__,VINFO,systemLogLevel,"Collision for keys %s%s and %s%s. (%d)",table->entries[bucketIndex].keys[0],table->entries[bucketIndex].keys[1],keys[0],keys[1],bucketIndex);
 
-		if (cudastrcmp(((MovieTuple_t *)(table->entries[bucketIndex].ptr))->movieName,ptr->movieName) != 0)
+		if (cudastrcmp(table->entries[bucketIndex].ptr.movieName,ptr->movieName) != 0)
 		//if (strcmp(((MovieTuple_t *)(table->entries[bucketIndex].ptr))->movieName,ptr->movieName) != 0)
 		{
 			if ( collisionBreaker(&table->entries[bucketIndex],ptr) == 1)
 			{
 				//cudaMemcpy(table->entries[bucketIndex].ptr,ptr,sizeof(MovieTuple_t),cudaMemcpyDeviceToDevice));
-				memcpy(table->entries[bucketIndex].ptr,ptr,sizeof(MovieTuple_t));
+				memcpy(&table->entries[bucketIndex].ptr,ptr,sizeof(MovieTuple_t));
 				//writeLog(__func__,VINFO,systemLogLevel,"Replacing entry in HashTable.");
 			}
 			else if ( collisionBreaker(&(table->entries[bucketIndex]),ptr) == -1 && *numCollisions < totalMovies )
 			{
-				memcpy(&collisions[(*numCollisions)].tuple,ptr,sizeof(MovieTuple_t));
-				collisions[(*numCollisions)].tuple = ptr;
+				memcpy(&(collisions[(*numCollisions)].tuple),ptr,sizeof(MovieTuple_t));
+				//collisions[(*numCollisions)].tuple = ptr;
 				collisions[(*numCollisions)].bucketIndex = bucketIndex;
 				(*numCollisions)++;
 				//writeLog(__func__,VINFO,systemLogLevel,"Adding entry to collision list at %d.",*numCollisions);
@@ -920,15 +944,15 @@ __device__ int addToHashTable(myHashTable_t *table, char keys[2][SMALL_BUFFER_SI
 	else
 	{
 		table->entries[bucketIndex].numKeys = numKeys;
-		table->entries[bucketIndex].keys = (char **) malloc(sizeof(char *) * 2);
-		table->entries[bucketIndex].keys[0] = (char *)  malloc (sizeof(char) * 8);
-		table->entries[bucketIndex].keys[1] = (char *) malloc (sizeof(char) * 64);
+		//table->entries[bucketIndex].keys = (char **) malloc(sizeof(char *) * 2);
+		//table->entries[bucketIndex].keys[0] = (char *)  malloc (sizeof(char) * 8);
+		//table->entries[bucketIndex].keys[1] = (char *) malloc (sizeof(char) * 64);
 		//strcpy(table->entries[bucketIndex].keys[0],keys[0]);
 		cudastrcpy(table->entries[bucketIndex].keys[0],keys[0]);
 		//strcpy(table->entries[bucketIndex].keys[1],keys[1]);
 		cudastrcpy(table->entries[bucketIndex].keys[1],keys[1]);
-		table->entries[bucketIndex].ptr = malloc(sizeof(MovieTuple_t));
-		memcpy(table->entries[bucketIndex].ptr,ptr,sizeof(MovieTuple_t));
+		//table->entries[bucketIndex].ptr = malloc(sizeof(MovieTuple_t));
+		memcpy(&(table->entries[bucketIndex].ptr),ptr,sizeof(MovieTuple_t));
 		//cudaMemcpy(table->entries[bucketIndex].ptr,ptr,sizeof(MovieTuple_t),cudaMemcpyDeviceToDevice);
 	}
 	return 0;
@@ -996,19 +1020,19 @@ void printHashTable(myHashTable_t *table)
 //int collisionBreaker(myHashEntry_t *entry1,MovieTuple_t *movieTuple)
 __device__ int collisionBreaker(myHashEntry_t *entry1,MovieTuple_t *movieTuple)
 {
-	if (((MovieTuple_t *) entry1->ptr)->movieRating > movieTuple->movieRating)
+	if ((entry1->ptr).movieRating > movieTuple->movieRating)
 	{
 		return 0;
 	}
-	else if (((MovieTuple_t *) entry1->ptr)->movieRating < movieTuple->movieRating)
+	else if ((entry1->ptr).movieRating < movieTuple->movieRating)
 	{
 		return 1;
 	}
-	else if (((MovieTuple_t *) entry1->ptr)->movieVotes >  movieTuple->movieVotes)
+	else if ((entry1->ptr).movieVotes >  movieTuple->movieVotes)
 	{
 		return 0;
 	}
-	else if (((MovieTuple_t *) entry1->ptr)->movieVotes <  movieTuple->movieVotes)
+	else if ((entry1->ptr).movieVotes <  movieTuple->movieVotes)
 	{
 		return 1;
 	}
@@ -1062,7 +1086,7 @@ void actualWorkFunction(char **lineBuff,int start,int end)
 		}
 		else
 		{
-			allMovies[movieCounter].line = strdup(lineBuff[i]);
+			strcpy(allMovies[movieCounter].line,lineBuff[i]);
 			strcpy(allMovies[movieCounter].movieName,splitBuffer[0]);
 			allMovies[movieCounter].movieVotes = (unsigned int) atoi(splitBuffer[1]);
 			allMovies[movieCounter].movieRating = (unsigned short) atoi(splitBuffer[2]);

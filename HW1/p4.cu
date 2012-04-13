@@ -108,7 +108,10 @@ int main(int argc, char **argv)
 	int *deviceCount,*deviceLines;
 
 	int threadsPerBlock,blocksPerGrid;
+
+#ifndef _WIN32
 	struct timespec start_time,end_time;
+#endif
 
 	if (argc != 3)
 	{
@@ -182,8 +185,10 @@ int main(int argc, char **argv)
 		CUDA_CALL(cudaMemcpy(deviceCopy,fileContents, fileSize * sizeof(char), cudaMemcpyHostToDevice));
 
 		//Start the CPU Timer 
+#ifndef _WIN32
 		clock_gettime(CLOCK_MONOTONIC,&start_time);
-		
+#endif
+		totalLines = 0;
 		//make a kernel for each process in the processList.
 		for (i = 0; i < numProcesses; i++)
 		{
@@ -209,14 +214,16 @@ int main(int argc, char **argv)
 		
 			//printf("GPU computation: %f msec\n", ktime);
 			
-			totalLines = 0;
 			for ( j = 0; j < threadsPerBlock * blocksPerGrid; j++)
 			{
 				processCount[i] += hostCount[j];
-				totalLines += hostLines[j];
+				totalLines += hostCount[j];
 			}
 		}
+#ifndef _WIN32
 		clock_gettime(CLOCK_MONOTONIC,&end_time);
+#endif
+
 		//blockSize: numThreads: totalCount: CPUTime: GPUTime
 		if (printedOnce == 0)
 		{
@@ -227,7 +234,11 @@ int main(int argc, char **argv)
 			printf("\nTotal Number of loglines: %d\n",totalLines);
 			printedOnce = 1;
 		}
+#ifndef _WIN32
 		printf("\n%d: %d: %d: %lfms: %fms\n",threadOffset,threadsPerBlock * blocksPerGrid,totalLines,(end_time.tv_sec - start_time.tv_sec) +  (end_time.tv_nsec - start_time.tv_nsec)/1000000.0,ktime);
+#else
+		printf("\n%d: %d: %d: %fms\n",threadOffset,threadsPerBlock * blocksPerGrid,totalLines,ktime);
+#endif
 	}
 	return 0;
 }
