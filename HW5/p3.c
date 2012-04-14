@@ -10,8 +10,8 @@ int main(int argc, char **argv)
 {
 	char tempBuff[BUFFER_SIZE] = {'\0'};
 	myHashTable_t wordCount,fileCount;
-	collidedEntry_t *collisions;
-	int numCollisions = 0, systemLogLevel;
+	collidedEntry_t *wordCollisions,*fileCollisions;
+	int numWordCollisions = 0, systemLogLevel, numFileCollisions = 0;
 	int i;
 	FILE *fCorpus,*fFileList,*fdataFile;
 	int numWords,fileSize;
@@ -27,8 +27,13 @@ int main(int argc, char **argv)
 	initHashTable(&wordCount);
 	initHashTable(&fileCount);
 
-	collisions = (collidedEntry_t *) malloc (sizeof(collidedEntry_t) * 512);
+	//TODO: Realloc as needed
+	wordCollisions = (collidedEntry_t *) malloc (sizeof(collidedEntry_t) * 512);
+	fileCollisions = (collidedEntry_t *) malloc (sizeof(collidedEntry_t) * 512);
+
 	corpusWords = (char **) malloc (sizeof(char *) * MAX_CORPUS_WORDS);
+	
+
 	for (i = 0; i < MAX_CORPUS_WORDS; i++)
 	{
 		corpusWords[i] = (char *) malloc (sizeof(char) * MAX_CORPUS_WORD_SIZE);
@@ -59,7 +64,7 @@ int main(int argc, char **argv)
 		//addToList(&countryList,tempBuff,strlen(tempBuff)+1);
 		strcpy(corpusWords[i],tempBuff);
 		tempBuff[0] = '\0';
-		addToHashTable(&wordCount,corpusWords[i],collisions,&numCollisions);
+		addToHashTable(&wordCount,corpusWords[i],wordCollisions,&numWordCollisions);
 		i++;
 	}
 	numWords = i;
@@ -108,7 +113,7 @@ int main(int argc, char **argv)
 		fread(fileContents,1,fileSize,fdataFile);
 		fclose(fdataFile);
 
-		actualWorkFunction(fileContents,0,fileSize,&wordCount,collisions,&numCollisions,corpusWords,numWords,&fileCount);
+		actualWorkFunction(fileContents,0,fileSize,&wordCount,wordCollisions,&numWordCollisions,corpusWords,numWords,&fileCount,fileCollisions,&numFileCollisions);
 		free(fileContents);
 	}
 
@@ -224,7 +229,7 @@ unsigned long hashFunction(char *str)
 	return hash;
 }
 
-void actualWorkFunction(char *dataBuff,int start,int end,myHashTable_t *table, collidedEntry_t *collisions, int *numCollisions,char **corpusWords,int numWords,myHashTable_t *fileHash)
+void actualWorkFunction(char *dataBuff,int start,int end,myHashTable_t *table, collidedEntry_t *collisions, int *numCollisions,char **corpusWords,int numWords,myHashTable_t *fileHash,collidedEntry_t *fileCollisions, int *numFileCollisions)
 {
 	char tempBuff[MEDIUM_BUFFER_SIZE] = {'\0'};
 	int i, j = 0;
@@ -256,7 +261,7 @@ void actualWorkFunction(char *dataBuff,int start,int end,myHashTable_t *table, c
 				if (changedThisTime[wordIndex] == 0)
 				{
 					//TODO: Add a collision set for fileHash
-					addToHashTable(fileHash,tempBuff,NULL,NULL);
+					addToHashTable(fileHash,tempBuff,fileCollisions,numFileCollisions);
 					changedThisTime[wordIndex] = 1;
 				}
 			}

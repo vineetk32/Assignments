@@ -39,7 +39,7 @@ typedef struct myHashTable
 
 int __test_test_and_set(int *mutex);
 
-void actualWorkFunction(char *dataBuff,int start,int end,myHashTable_t *table, collidedEntry_t *collisions, int *numCollisions,char **corpusWords,int numWords,myHashTable_t *fileHash);
+void actualWorkFunction(char *dataBuff,int start,int end,myHashTable_t *table, collidedEntry_t *collisions, int *numCollisions,char **corpusWords,int numWords,myHashTable_t *fileHash,collidedEntry_t *fileCollisions, int *numFileCollisions);
 unsigned int getFromHashTable(myHashTable_t *table, char *key);
 unsigned long hashFunction(char *str);
 void initHashTable(myHashTable_t *table);
