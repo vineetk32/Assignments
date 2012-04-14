@@ -2,13 +2,14 @@
 
 int systemLogLevel;
 
-#define DEBUG
+//#define DEBUG
 int totalFiles,totalWords;
+int *changedThisTime;
 
 int main(int argc, char **argv)
 {
 	char tempBuff[BUFFER_SIZE] = {'\0'};
-	myHashTable_t hashTable;
+	myHashTable_t wordCount,fileCount;
 	collidedEntry_t *collisions;
 	int numCollisions = 0, systemLogLevel;
 	int i;
@@ -23,7 +24,8 @@ int main(int argc, char **argv)
 		clock_gettime(CLOCK_MONOTONIC,&start_time);
 #endif
 
-	initHashTable(&hashTable);
+	initHashTable(&wordCount);
+	initHashTable(&fileCount);
 
 	collisions = (collidedEntry_t *) malloc (sizeof(collidedEntry_t) * 512);
 	corpusWords = (char **) malloc (sizeof(char *) * MAX_CORPUS_WORDS);
@@ -57,10 +59,13 @@ int main(int argc, char **argv)
 		//addToList(&countryList,tempBuff,strlen(tempBuff)+1);
 		strcpy(corpusWords[i],tempBuff);
 		tempBuff[0] = '\0';
-		addToHashTable(&hashTable,corpusWords[i],collisions,&numCollisions);
+		addToHashTable(&wordCount,corpusWords[i],collisions,&numCollisions);
 		i++;
 	}
 	numWords = i;
+
+	changedThisTime = (int *) malloc (sizeof(int) * numWords);
+
 #ifdef DEBUG
 	printf("Corpus-Words - ");
 	for (i = 0; i < numWords; i++)
@@ -81,15 +86,15 @@ int main(int argc, char **argv)
 
 	i = 0;
 
-
 	while (fgets(tempBuff,SMALL_BUFFER_SIZE,fFileList) != NULL)
 	{
+		memset(changedThisTime,0,numWords * sizeof(int));
 		totalFiles++;
-		tempBuff[strlen(tempBuff) -1] = '\0';
+		tempBuff[strlen(tempBuff) - 1] = '\0';
 		fdataFile = fopen(tempBuff,"r");
 		if (fdataFile == NULL)
 		{
-			printf("\nError opening datafile!\n");
+			printf("\nError opening datafile - %s \n",tempBuff);
 			return -1;
 		}
 
@@ -103,7 +108,7 @@ int main(int argc, char **argv)
 		fread(fileContents,1,fileSize,fdataFile);
 		fclose(fdataFile);
 
-		actualWorkFunction(fileContents,0,fileSize,&hashTable,collisions,&numCollisions,corpusWords,numWords);
+		actualWorkFunction(fileContents,0,fileSize,&wordCount,collisions,&numCollisions,corpusWords,numWords,&fileCount);
 		free(fileContents);
 	}
 
@@ -113,7 +118,7 @@ int main(int argc, char **argv)
 
 #ifdef DEBUG
 	printf("\nHash Table contents -  ");
-	printHashTable(&hashTable);
+	printHashTable(&wordCount);
 	printf("\nCollided Entries - ");
 	printf("\n=========================================");
 	for (i = 0; i < numCollisions; i++)
@@ -125,17 +130,17 @@ int main(int argc, char **argv)
 
 	for(i = 0; i < BUCKET_SIZE; i++)
 	{
-		if (hashTable.entries[i].value != 0)
+		if (wordCount.entries[i].value != 0)
 		{
-			printf("\n%s:%d:4",hashTable.entries[i].key,--hashTable.entries[i].value);
+			printf("\n%s:%d:%d",wordCount.entries[i].key,--wordCount.entries[i].value,fileCount.entries[i].value);
 		}
 	}
 	printf("\n%d:%d:",totalFiles,totalWords);
 	for(i = 0; i < BUCKET_SIZE; i++)
 	{
-		if (hashTable.entries[i].value != 0)
+		if (wordCount.entries[i].value != 0)
 		{
-			printf("\n%s:%f",hashTable.entries[i].key,(float) hashTable.entries[i].value/totalWords);
+			printf("\n%s:%f",wordCount.entries[i].key,(float) wordCount.entries[i].value/totalWords);
 		}
 	}
 
@@ -219,10 +224,11 @@ unsigned long hashFunction(char *str)
 	return hash;
 }
 
-void actualWorkFunction(char *dataBuff,int start,int end,myHashTable_t *table, collidedEntry_t *collisions, int *numCollisions,char **corpusWords,int numWords)
+void actualWorkFunction(char *dataBuff,int start,int end,myHashTable_t *table, collidedEntry_t *collisions, int *numCollisions,char **corpusWords,int numWords,myHashTable_t *fileHash)
 {
 	char tempBuff[MEDIUM_BUFFER_SIZE] = {'\0'};
 	int i, j = 0;
+	int wordIndex = 0;
 	
 	//Skip till you reach a whitespace char
 	//while (dataBuff[start] != ' ')
@@ -244,9 +250,15 @@ void actualWorkFunction(char *dataBuff,int start,int end,myHashTable_t *table, c
 //#ifdef DEBUG
 //			printf("(%s)",tempBuff);
 //#endif
-			if (arrayContains(corpusWords,tempBuff,numWords) >= 0)
+			if ( (wordIndex = arrayContains(corpusWords,tempBuff,numWords)) >= 0)
 			{
 				addToHashTable(table,tempBuff,collisions,numCollisions);
+				if (changedThisTime[wordIndex] == 0)
+				{
+					//TODO: Add a collision set for fileHash
+					addToHashTable(fileHash,tempBuff,NULL,NULL);
+					changedThisTime[wordIndex] = 1;
+				}
 			}
 			memset(tempBuff,0,MEDIUM_BUFFER_SIZE);
 			totalWords++;
