@@ -181,6 +181,14 @@ int addToHashTable(myHashTable_t *table, char *key,collidedEntry_t *collisions,i
 		if (strcmp(key,table->entries[bucketIndex].key) != 0)
 		{
 			writeLog(__func__,VINFO,systemLogLevel,"Collision for keys %s%s and %s%s.",table->entries[bucketIndex].key,key);
+			for (i = 0; i < *numCollisions; i++)
+			{
+				if ( strcmp(collisions[(*numCollisions)].entry.key,key) == 0)
+				{
+					collisions[(*numCollisions)].entry.value++;
+					return 0;
+				}
+			}
 			strcpy(collisions[(*numCollisions)].entry.key,key);
 			collisions[(*numCollisions)].bucketIndex = bucketIndex;
 			collisions[(*numCollisions)].entry.value = 1;
