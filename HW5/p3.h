@@ -24,22 +24,26 @@ typedef struct collidedEntry
 	unsigned int bucketIndex;
 } collidedEntry_t;
 
-typedef struct threadPackage
-{
-	int start,end;
-	char **lineBuff;
-	pthread_mutex_t *mutex;
-} threadPackage_t;
 
 typedef struct myHashTable
 {
 	myHashEntry_t entries[BUCKET_SIZE];
 }myHashTable_t;
 
+typedef struct threadPackage
+{
+	int start,end,numWords;
+	char *dataBuff;
+	pthread_mutex_t *mutex;
+	myHashTable_t *corpusTable,*fileTable;
+	collidedEntry_t *corpusCollisions,*fileCollisions;
+	int *numCorpusCollisions,*numFileCollisions;
+	char **corpusWords;
+} threadPackage_t;
 
 int __test_test_and_set(int *mutex);
 
-void actualWorkFunction(char *dataBuff,int start,int end,myHashTable_t *table, collidedEntry_t *collisions, int *numCollisions,char **corpusWords,int numWords,myHashTable_t *fileHash,collidedEntry_t *fileCollisions, int *numFileCollisions);
+void actualWorkFunction(char *dataBuff,int start,int end,myHashTable_t *table, collidedEntry_t *collisions, int *numCollisions,char **corpusWords,int numWords,myHashTable_t *fileHash,collidedEntry_t *fileCollisions, int *numFileCollisions,pthread_mutex_t *mutex);
 unsigned int getFromHashTable(myHashTable_t *table, char *key);
 unsigned long hashFunction(char *str);
 void initHashTable(myHashTable_t *table);

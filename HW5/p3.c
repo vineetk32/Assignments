@@ -1,10 +1,17 @@
 #include "p3.h"
 
 int systemLogLevel;
-
+#define NUM_THREADS 1
 //#define DEBUG
 int totalFiles,totalWords;
 int *changedThisTime;
+
+
+void *threadFunc(void *arg)
+{
+	threadPackage_t *package = (threadPackage_t *) arg;
+	actualWorkFunction(package->dataBuff,package->start,package->end,package->corpusTable,package->corpusCollisions,package->numCorpusCollisions,package->corpusWords,package->numWords,package->fileTable,package->fileCollisions,package->numFileCollisions,package->mutex);
+}
 
 int main(int argc, char **argv)
 {
@@ -12,12 +19,15 @@ int main(int argc, char **argv)
 	myHashTable_t wordCount,fileCount;
 	collidedEntry_t *wordCollisions,*fileCollisions;
 	int numWordCollisions = 0, systemLogLevel, numFileCollisions = 0;
-	int i;
+	int i, fileSplit;
 	FILE *fCorpus,*fFileList,*fdataFile;
 	int numWords,fileSize;
 	char **corpusWords;
 	char currToken[SMALL_BUFFER_SIZE] = {'\0'};
 	char *fileContents;
+	pthread_t threads[NUM_THREADS];
+	threadPackage_t threadPackages[NUM_THREADS];
+	pthread_mutex_t mutex;
 
 #ifndef _WIN32
 		struct timespec start_time,end_time;
@@ -90,6 +100,8 @@ int main(int argc, char **argv)
 	}
 
 	i = 0;
+	
+	pthread_mutex_init(&mutex,NULL);
 
 	while (fgets(tempBuff,SMALL_BUFFER_SIZE,fFileList) != NULL)
 	{
@@ -113,9 +125,51 @@ int main(int argc, char **argv)
 		fread(fileContents,1,fileSize,fdataFile);
 		fclose(fdataFile);
 
-		actualWorkFunction(fileContents,0,fileSize,&wordCount,wordCollisions,&numWordCollisions,corpusWords,numWords,&fileCount,fileCollisions,&numFileCollisions);
+		//actualWorkFunction(fileContents,0,fileSize,&wordCount,wordCollisions,&numWordCollisions,corpusWords,numWords,&fileCount,fileCollisions,&numFileCollisions);
+		//void actualWorkFunction(char *dataBuff,int start,int end,myHashTable_t *table, collidedEntry_t *collisions, int *numCollisions,char **corpusWords,int numWords,myHashTable_t *fileHash,collidedEntry_t *fileCollisions, int *numFileCollisions);
+		for (i = 0; i < NUM_THREADS; i++)
+		{
+			threadPackages[i].dataBuff = fileContents;
+			threadPackages[i].corpusTable = &wordCount;
+			threadPackages[i].corpusWords = corpusWords;
+			threadPackages[i].fileCollisions = fileCollisions;
+			threadPackages[i].fileTable = &fileCount;
+			threadPackages[i].numCorpusCollisions = &numWordCollisions;
+			threadPackages[i].numFileCollisions = &numFileCollisions;
+			threadPackages[i].numWords = numWords;
+			threadPackages[i].mutex = &mutex;
+
+			if (i > 0)
+			{
+				threadPackages[i].start = threadPackages[i - 1].end + 1;
+			}
+			else
+			{
+				threadPackages[i].start = 0;
+			}
+			if ( i == (NUM_THREADS - 1))
+			{
+				threadPackages[i].end = fileSize;
+			}
+			else
+			{
+				threadPackages[i].end = threadPackages[i].start + fileSize / NUM_THREADS;
+			}
+//#ifdef DEBUG
+			printf("\nThread %d: Start: %d, End %d, fileSize - %d",i,threadPackages[i].start,threadPackages[i].end,fileSize);
+//#endif
+
+			pthread_create(&threads[i],NULL,threadFunc,((void *) &threadPackages[i]));
+		}
+
+		for (i = 0; i < NUM_THREADS; i++)
+		{
+			pthread_join(threads[i],NULL);
+		}
 		free(fileContents);
 	}
+
+	pthread_mutex_destroy(&mutex);
 
 #ifndef _WIN32
 		clock_gettime(CLOCK_MONOTONIC,&end_time);
@@ -126,9 +180,9 @@ int main(int argc, char **argv)
 	printHashTable(&wordCount);
 	printf("\nCollided Entries - ");
 	printf("\n=========================================");
-	for (i = 0; i < numCollisions; i++)
+	for (i = 0; i < numWordCollisions; i++)
 	{
-		printf("\n%d (%d) %s : %d",i,collisions[i].bucketIndex,collisions[i].entry.key,collisions[i].entry.value);
+		printf("\n%d (%d) %s : %d",i,wordCollisions[i].bucketIndex,wordCollisions[i].entry.key,wordCollisions[i].entry.value);
 	}
 	printf("\n=========================================");
 #endif
@@ -237,20 +291,20 @@ unsigned long hashFunction(char *str)
 	return hash;
 }
 
-void actualWorkFunction(char *dataBuff,int start,int end,myHashTable_t *table, collidedEntry_t *collisions, int *numCollisions,char **corpusWords,int numWords,myHashTable_t *fileHash,collidedEntry_t *fileCollisions, int *numFileCollisions)
+void actualWorkFunction(char *dataBuff,int start,int end,myHashTable_t *table, collidedEntry_t *collisions, int *numCollisions,char **corpusWords,int numWords,myHashTable_t *fileHash,collidedEntry_t *fileCollisions, int *numFileCollisions, pthread_mutex_t *mutex)
 {
 	char tempBuff[MEDIUM_BUFFER_SIZE] = {'\0'};
 	int i, j = 0;
 	int wordIndex = 0;
 	
-	//Skip till you reach a whitespace char
-	//while (dataBuff[start] != ' ')
-	//{
-	//	if (dataBuff[start] != '\0')
-	//	{
-	//		start++;
-	//	}
-	//}
+	//Skip till you reach a whitespace char, unless at the very beginning of the buffer
+	while (dataBuff[start] != ' ' && start < end && start != 0)
+	{
+		if (dataBuff[start] != '\0')
+		{
+			start++;
+		}
+	}
 	
 	tempBuff[0] = '\0';
 	//printf("\n");
@@ -259,22 +313,27 @@ void actualWorkFunction(char *dataBuff,int start,int end,myHashTable_t *table, c
 		if ( dataBuff[i] == ' ' || i == end - 1)
 		{
 			j = 0;
-
-//#ifdef DEBUG
-//			printf("(%s)",tempBuff);
-//#endif
 			if ( (wordIndex = arrayContains(corpusWords,tempBuff,numWords)) >= 0)
 			{
+#ifdef DEBUG
+				printf("\nFound %s ending at %d\n",corpusWords[wordIndex],i);
+#endif
+				pthread_mutex_lock(mutex);
 				addToHashTable(table,tempBuff,collisions,numCollisions);
+				pthread_mutex_unlock(mutex);
 				if (changedThisTime[wordIndex] == 0)
 				{
 					//TODO: Add a collision set for fileHash
+					pthread_mutex_lock(mutex);
 					addToHashTable(fileHash,tempBuff,fileCollisions,numFileCollisions);
+					pthread_mutex_unlock(mutex);
 					changedThisTime[wordIndex] = 1;
 				}
 			}
 			memset(tempBuff,0,MEDIUM_BUFFER_SIZE);
+			pthread_mutex_lock(mutex);
 			totalWords++;
+			pthread_mutex_unlock(mutex);
 		}
 		else if (dataBuff[i] != '\n')
 		{
