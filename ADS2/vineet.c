@@ -3,7 +3,7 @@
 
 #define BLOCKSIZE 256
 
-#define STEP
+//#define STEP
 
 typedef int key_t;
 typedef int object_t;
@@ -12,8 +12,8 @@ typedef struct tr_n_t
 	key_t      key; 
 	struct tr_n_t   *left;
 	struct tr_n_t  *right;
-	/* possibly additional information */ 
 	unsigned int height, measure, leftmin,rightmax;
+	unsigned int leftInterval,rightInterval;
 } m_tree_t;
 
 typedef struct st_t
@@ -46,11 +46,9 @@ void return_node(m_tree_t *node);
 stack_t *get_node_st();
 void return_node_st(stack_t *node);
 m_tree_t *create_tree(void);
-object_t *find_iterative(m_tree_t *tree, key_t query_key);
 unsigned int setRightMax(m_tree_t *node);
 unsigned int setLeftMin(m_tree_t *node);
 unsigned int setMeasure(m_tree_t *node);
-object_t *find_recursive(m_tree_t *tree, key_t query_key);
 object_t *_delete_balanced(m_tree_t *tree, key_t delete_key);
 void remove_tree(m_tree_t *tree);
 m_tree_t *interval_find(m_tree_t *tree, key_t a, key_t b);
@@ -119,17 +117,21 @@ void right_rotation(m_tree_t *n)
 {
 	m_tree_t *tmp_node;
 	key_t tmp_key;
-	unsigned int leftKey, rightKey;
+	unsigned int leftKey, rightKey,leftInterval,rightInterval;
 	tmp_node = n->right;
 
 	tmp_key = n->key;
 	leftKey = n->leftmin;
 	rightKey = n->rightmax;
+	leftInterval = n->leftInterval;
+	rightInterval = n->rightInterval;
 
 	n->right = n->left;
 	n->key = n->left->key;
 	n->leftmin = n->left->leftmin;
 	n->rightmax = n->left->rightmax;
+	n->leftInterval = n->left->leftInterval;
+	n->rightInterval = n->left->rightInterval;
 
 	n->left = n->right->left;
 	n->right->left = n->right->right;
@@ -138,23 +140,30 @@ void right_rotation(m_tree_t *n)
 	n->right->key = tmp_key;
 	n->right->leftmin = leftKey;
 	n->right->rightmax = rightKey;
+	n->right->leftInterval = leftInterval;
+	n->right->rightInterval = rightInterval;
 }
 
 void left_rotation(m_tree_t *n)
 {
 	m_tree_t *tmp_node;
 	key_t tmp_key;
-	unsigned int leftKey, rightKey;
+	unsigned int leftKey, rightKey,leftInterval,rightInterval;
 
 	tmp_node = n->left;
 	tmp_key = n->key;
 	leftKey = n->leftmin;
 	rightKey = n->rightmax;
+	leftInterval = n->leftInterval;
+	rightInterval = n->rightInterval;
+
 
 	n->left = n->right;
 	n->key = n->right->key;
 	n->leftmin =  n->right->leftmin;
 	n->rightmax = n->right->rightmax;
+	n->leftInterval = n->right->leftInterval;
+	n->rightInterval = n->right->rightInterval;
 
 	n->right = n->left->right;
 	n->left->right = n->left->left;
@@ -163,6 +172,8 @@ void left_rotation(m_tree_t *n)
 	n->left->key = tmp_key;
 	n->left->leftmin = leftKey;
 	n->left->rightmax = rightKey;
+	n->left->leftInterval = leftInterval;
+	n->left->rightInterval = rightInterval;
 
 }
 
@@ -178,13 +189,13 @@ void printTree (m_tree_t *root, int level)
 	if (root->right == NULL)
 	{
 		indent('\t', level);
-		printf("%d ]%d,%d[ (%d)\n", root->key,root->leftmin,root->rightmax,root->measure);
+		printf("%d ]%d,%d[ (%d,%d) (%d)\n", root->key,root->leftInterval,root->rightInterval,root->leftmin,root->rightmax,root->measure);
 	}
 	else
 	{
 		printTree(root->right, level + 1);
 		indent('\t', level);
-		printf("%d ]%d,%d[ (%d)\n", root->key,root->leftmin,root->rightmax,root->measure);
+		printf("%d ]%d,%d[ (%d,%d) (%d)\n", root->key,root->leftInterval,root->rightInterval,root->leftmin,root->rightmax,root->measure);
 		printTree(root->left, level + 1);
 	}
 }
@@ -235,43 +246,6 @@ m_tree_t *create_tree(void)
 	tmp_node = get_node();
 	tmp_node->left = NULL;
 	return( tmp_node );
-}
-
-object_t *find_iterative(m_tree_t *tree, key_t query_key)
-{ 
-	m_tree_t *tmp_node;
-	if( tree->left == NULL )
-		return(NULL);
-	else
-	{ 
-		tmp_node = tree;
-		while( tmp_node->right != NULL )
-		{   
-			if( query_key < tmp_node->key )
-				tmp_node = tmp_node->left;
-			else
-				tmp_node = tmp_node->right;
-		}
-		if( tmp_node->key == query_key )
-			return( (object_t *) tmp_node->left );
-		else
-			return( NULL );
-	}
-}
-
-object_t *find_recursive(m_tree_t *tree, key_t query_key)
-{  
-	if( tree->left == NULL || (tree->right == NULL && tree->key != query_key ) )
-		return(NULL);
-	else if (tree->right == NULL && tree->key == query_key )
-		return( (object_t *) tree->left );     
-	else
-	{  
-		if( query_key < tree->key )
-			return( find_recursive(tree->left, query_key) );
-		else
-			return( find_recursive(tree->right, query_key) );
-	}
 }
 
 object_t *_delete_balanced(m_tree_t *tree, key_t delete_key)
@@ -468,10 +442,13 @@ void check_tree( m_tree_t *tr, int depth, int lower, int upper )
 	}
 }
 
-int insert_balanced(m_tree_t *tree, key_t new_key,object_t *new_object,unsigned int leftMin, unsigned int rightMax)
+int insert_balanced(m_tree_t *tree, key_t new_key,object_t *new_object,unsigned int leftInterval, unsigned int rightInterval)
 {
 	m_tree_t *tmp_node;
 	stack_t *stack;
+	unsigned int currLeftInterval, currRightInterval;
+	currLeftInterval = leftInterval;
+	currRightInterval = rightInterval;
 	if( tree->left == NULL )
 	{
 		tree->left = (m_tree_t *) new_object;
@@ -479,8 +456,10 @@ int insert_balanced(m_tree_t *tree, key_t new_key,object_t *new_object,unsigned 
 		tree->height = 0;
 		tree->right = NULL;
 		tree->measure = 1;
-		tree->leftmin = leftMin;
-		tree->rightmax = rightMax;
+		tree->leftmin = currLeftInterval;
+		tree->rightmax = currRightInterval;
+		tree->leftInterval = currLeftInterval;
+		tree->rightInterval = currRightInterval;
 	}
 	else
 	{
@@ -488,18 +467,30 @@ int insert_balanced(m_tree_t *tree, key_t new_key,object_t *new_object,unsigned 
 		tmp_node = tree;
 		while( tmp_node->right != NULL )
 		{
+			tmp_node->leftInterval = Min(tmp_node->leftInterval, currLeftInterval);
+			tmp_node->rightInterval = Max(tmp_node->rightInterval,currRightInterval);
+
 			push(tmp_node,stack);
 			if( new_key < tmp_node->key )
+			{
+				currRightInterval = tmp_node->key;
 				tmp_node = tmp_node->left;
+			}
 			else
+			{
+				currLeftInterval = tmp_node->key;
 				tmp_node = tmp_node->right;
+			}
 		}
 		/* found the candidate leaf. Test whether key distinct */
 		if( tmp_node->key == new_key )
 		{
 			//printf("\nOverlapping interval - %d,%d",leftMin,rightMax);
-			tmp_node->leftmin = Min(leftMin,tmp_node->leftmin);
-			tmp_node->rightmax = Max(rightMax,tmp_node->rightmax);
+			tmp_node->leftmin = Min(leftInterval,tmp_node->leftmin);
+			tmp_node->rightmax = Max(rightInterval,tmp_node->rightmax);
+
+			tmp_node->rightInterval = currRightInterval;
+			tmp_node->leftInterval = currLeftInterval;
 		}
 		else 
 		{
@@ -520,24 +511,41 @@ int insert_balanced(m_tree_t *tree, key_t new_key,object_t *new_object,unsigned 
 			new_leaf->right = NULL;
 			new_leaf->height = 0;
 			new_leaf->measure = 1;
-			new_leaf->leftmin = leftMin;
-			new_leaf->rightmax = rightMax;
+			new_leaf->leftmin = leftInterval;
+			new_leaf->rightmax = rightInterval;
 			if( tmp_node->key < new_key )
 			{
 				tmp_node->left = old_leaf;
 				tmp_node->right = new_leaf;
 				tmp_node->key = new_key;
+
+				old_leaf->rightInterval = new_key;
+				old_leaf->leftInterval = currLeftInterval;
+
+				new_leaf->rightInterval = currRightInterval;
+				new_leaf->leftInterval = new_key;
+
 			}
 			else
 			{
 				tmp_node->left = new_leaf;
 				tmp_node->right = old_leaf;
+
+				new_leaf->rightInterval = new_key;
+				new_leaf->leftInterval = currLeftInterval;
+
+				old_leaf->rightInterval = currRightInterval;
+				old_leaf->leftInterval = new_key;
+
 			}
 			tmp_node->height = 1;
 			tmp_node->rightmax = setRightMax(tmp_node);
 			tmp_node->leftmin = setLeftMin(tmp_node);
-			tmp_node->measure = setMeasure(tmp_node); //tmp_node->rightmax - tmp_node->leftmin;
-			push(tmp_node,stack);
+			tmp_node->measure = tmp_node->right->key - tmp_node->left->key;
+			tmp_node->leftInterval = currLeftInterval;
+			tmp_node->rightInterval = currRightInterval;
+			//tmp_node->measure = setMeasure(tmp_node);
+			//push(tmp_node,stack);
 		}
 		/* rebalance */
 		while( !stack_empty(stack))
@@ -583,8 +591,7 @@ int insert_balanced(m_tree_t *tree, key_t new_key,object_t *new_object,unsigned 
 					tmp_node->height = tmp_height + 2;
 				}
 			}
-			else /* update height even if there
-				 was no rotation */
+			else
 			{
 				if( tmp_node->left->height > tmp_node->right->height )
 					tmp_node->height = tmp_node->left->height + 1;
@@ -595,9 +602,18 @@ int insert_balanced(m_tree_t *tree, key_t new_key,object_t *new_object,unsigned 
 			tmp_node->leftmin = setLeftMin(tmp_node);
 			tmp_node->measure = setMeasure(tmp_node);
 		}
+		/*while( !stack_empty(stack))
+		{
+			tmp_node = pop(stack);
+			tmp_node->rightmax = setRightMax(tmp_node);
+			tmp_node->leftmin = setLeftMin(tmp_node);
+			tmp_node->measure = setMeasure(tmp_node);
+		}*/
 		remove_stack(stack);
 	}
-	//recursiveFixxer(tree);
+	tree->leftInterval = tree->leftmin;
+	tree->rightInterval = tree->rightmax;
+	recursiveFixxer(tree);
 	return( 0 );
 }
 #ifdef STEP
@@ -615,21 +631,6 @@ int main()
 			int leftKey,rightKey;
 			scanf(" %d,%d", &leftKey,&rightKey);
 			insert_interval(searchtree,leftKey,rightKey);
-		}
-		else if ( nextop == 'f' )
-		{ 
-			int findkey, *findobj;
-			scanf(" %d", &findkey);
-			findobj = find_iterative( searchtree, findkey);
-			if( findobj == NULL )
-				printf("  find (iterative) failed, for key %d\n", findkey);
-			else
-				printf("  find (iterative) successful, found object %d\n", *findobj);
-			findobj = find_recursive( searchtree, findkey);
-			if( findobj == NULL )
-				printf("  find (recursive) failed, for key %d\n", findkey);
-			else
-				printf("  find (recursive) successful, found object %d\n", *findobj);
 		}
 		else if ( nextop == 'v' )
 		{ 
@@ -719,39 +720,46 @@ unsigned int setLeftMin(m_tree_t *node)
 
 unsigned int setMeasure(m_tree_t *node)
 {
-	unsigned int l = node->left->key;
-	unsigned int r = node->right->key;
+	unsigned int l = node->leftInterval;
+	unsigned int r = node->rightInterval;
 	unsigned int measure = 1;
-	if (node->right->leftmin < l && node->left->rightmax >= r)
-	{
-		measure = r - l;
-	}
-	else if (node->right->leftmin >= l && node->left->rightmax >= r)
-	{
-		measure = (r - node->key) + node->left->measure;
-	}
-	else if (node->right->leftmin < l && node->left->rightmax < r)
-	{
-		measure = node->right->measure + (node->key - l);
-	}
-	else if (node->right->leftmin >= l && node->left->rightmax < r)
-	{
-		measure = node->right->measure + node->left->measure;
-	}
-	else
-	{
-		printf("\nNone of the 4 cases!");
-	}
+	//if (node->height > 1 )
+	//{
+		if (node->right->leftmin < l && node->left->rightmax >= r)
+		{
+			measure = r - l;
+		}
+		else if (node->right->leftmin >= l && node->left->rightmax >= r)
+		{
+			measure = (r - node->key) + node->left->measure;
+		}
+		else if (node->right->leftmin < l && node->left->rightmax < r)
+		{
+			measure = node->right->measure + (node->key - l);
+		}
+		else if (node->right->leftmin >= l && node->left->rightmax < r)
+		{
+			measure = node->right->measure + node->left->measure;
+		}
+		else
+		{
+			printf("\nNone of the 4 cases!");
+		}
+	//}
+	//else
+	//{
+	//	measure = node->right->rightInterval - node->left->leftInterval;
+	//}
 	return measure;
 }
 
 #ifndef STEP
 int main()
 {
-	int i; m_tree_t *t; ;
+	int i; 
+	m_tree_t *t;
 	printf("starting \n");
 	t = create_tree();
-	insert_interval(t,0,2);
 	for(i=0; i< 50; i++ )
 	{
 		insert_interval( t, 2*i, 2*i +1 );
@@ -851,6 +859,12 @@ void recursiveFixxer(m_tree_t *root)
 {
 	if (root->height > 1)
 	{
+		root->left->leftInterval = root->leftInterval;
+		root->left->rightInterval = root->key;
+
+		root->right->rightInterval = root->rightInterval;
+		root->right->leftInterval = root->key;
+
 		recursiveFixxer(root->left);
 		recursiveFixxer(root->right);
 		root->rightmax = setRightMax(root);
@@ -861,7 +875,22 @@ void recursiveFixxer(m_tree_t *root)
 	{
 		root->rightmax = setRightMax(root);
 		root->leftmin =  setLeftMin(root);
+
+		//Who will fix the fixxer?
+		if (root->leftInterval < root->leftmin)
+			root->leftInterval = root->leftmin;
+
+		if (root->rightInterval > root->rightmax)
+			root->leftInterval = root->rightmax;
+
 		root->measure =  setMeasure(root);
+
+		root->left->leftInterval = root->leftInterval;
+		root->left->rightInterval = root->key;
+
+		root->right->rightInterval = root->rightInterval;
+		root->right->leftInterval = root->key;
+
 	}
 }
 
