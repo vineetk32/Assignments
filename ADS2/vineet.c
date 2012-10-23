@@ -138,7 +138,7 @@ void right_rotation(m_tree_t *n)
 	m_tree_t *tmp_node;
 	key_t tmp_key;
 	unsigned int leftKey, rightKey,leftInterval,rightInterval;
-	interval_node *list;
+	//interval_node *list;
 
 	tmp_node = n->right;
 	tmp_key = n->key;
@@ -146,7 +146,7 @@ void right_rotation(m_tree_t *n)
 	rightKey = n->rightmax;
 	leftInterval = n->leftInterval;
 	rightInterval = n->rightInterval;
-	list = cloneList(n->list);
+	//list = cloneList(n->list);
 
 	n->right = n->left;
 	n->key = n->left->key;
@@ -154,7 +154,7 @@ void right_rotation(m_tree_t *n)
 	n->rightmax = n->left->rightmax;
 	n->leftInterval = n->left->leftInterval;
 	n->rightInterval = n->left->rightInterval;
-	n->list = appendList(n->list,n->left->list);
+	//n->list = appendList(n->list,n->left->list);
 
 	n->left = n->right->left;
 	n->right->left = n->right->right;
@@ -165,8 +165,9 @@ void right_rotation(m_tree_t *n)
 	n->right->rightmax = rightKey;
 	n->right->leftInterval = leftInterval;
 	n->right->rightInterval = rightInterval;
-	n->right->list = appendList(n->right->list,list);
-	freeList(list);
+	//n->right->list = appendList(n->right->list,list);
+	//printf("\nnl - %p, nll - %p, nrl - %p",(void *) &(n->list), (void *) &(n->left->list), (void *) &(n->right->list));
+	//freeList(list);
 }
 
 void left_rotation(m_tree_t *n)
@@ -174,7 +175,7 @@ void left_rotation(m_tree_t *n)
 	m_tree_t *tmp_node;
 	key_t tmp_key;
 	unsigned int leftKey, rightKey,leftInterval,rightInterval;
-	interval_node *list;
+	//interval_node *list;
 
 	tmp_node = n->left;
 	tmp_key = n->key;
@@ -182,7 +183,7 @@ void left_rotation(m_tree_t *n)
 	rightKey = n->rightmax;
 	leftInterval = n->leftInterval;
 	rightInterval = n->rightInterval;
-	list = cloneList(n->list);
+	//list = cloneList(n->list);
 
 
 	n->left = n->right;
@@ -191,7 +192,7 @@ void left_rotation(m_tree_t *n)
 	n->rightmax = n->right->rightmax;
 	n->leftInterval = n->right->leftInterval;
 	n->rightInterval = n->right->rightInterval;
-	n->list =appendList(n->list, n->right->list);
+	//n->list =appendList(n->list, n->right->list);
 
 	n->right = n->left->right;
 	n->left->right = n->left->left;
@@ -202,8 +203,9 @@ void left_rotation(m_tree_t *n)
 	n->left->rightmax = rightKey;
 	n->left->leftInterval = leftInterval;
 	n->left->rightInterval = rightInterval;
-	n->left->list = appendList(n->left->list,list);
-	freeList(list);
+	//n->left->list = appendList(n->left->list,list);
+	//printf("\nnl - %lx, nll - %lx, nrl - %lx",(unsigned long int) &(n->list), (unsigned long int) &(n->left->list), (unsigned long int) &(n->right->list));
+	//freeList(list);
 }
 
 void indent(char ch, int level)
@@ -341,6 +343,12 @@ object_t *_delete_balanced(m_tree_t *tree, key_t delete_key,unsigned int leftInt
 				other_node = upper_node->left;
 			}
 		}
+		if (intervalInList(tmp_node->list,leftInterval,rightInterval))
+		{
+			tmp_node->list = deleteFromList(tmp_node->list,leftInterval,rightInterval);
+			changeIntervals(tmp_node,leftInterval,rightInterval);
+		}
+
 		if( tmp_node->key != delete_key )
 			return( NULL );
 		else if (!isInList(tmp_node->list,delete_key))
@@ -348,18 +356,17 @@ object_t *_delete_balanced(m_tree_t *tree, key_t delete_key,unsigned int leftInt
 			upper_node->key   = other_node->key;
 			upper_node->left  = other_node->left;
 			upper_node->right = other_node->right;
-			deleted_object = (object_t *) tmp_node->left;
+			upper_node->height = 0;
 			freeList(tmp_node->list);
 			tmp_node->list = NULL;
 			return_node( tmp_node );
 			freeList(other_node->list);
 			other_node->list = NULL;
 			return_node( other_node );
-			return( deleted_object );
 		}
 		/* rebalance */
-		//finished = 0;
-		while( !stack_empty(stack))// && !finished )
+		pop(stack);
+		while( !stack_empty(stack))
 		{
 			int tmp_height, old_height;
 			tmp_node = pop(stack);
@@ -524,7 +531,7 @@ int insert_balanced(m_tree_t *tree, key_t new_key,object_t *new_object,unsigned 
 			old_leaf->rightmax = tmp_node->rightmax;
 			old_leaf->measure = 1;
 			old_leaf->height = 0;
-			old_leaf->list = tmp_node->list;
+			old_leaf->list = cloneList(tmp_node->list);
 			old_leaf->right= NULL;
 
 			new_leaf = get_node();
@@ -545,8 +552,19 @@ int insert_balanced(m_tree_t *tree, key_t new_key,object_t *new_object,unsigned 
 				old_leaf->rightInterval = new_key;
 				old_leaf->leftInterval = currLeftInterval;
 
+				if (!intervalInList(old_leaf->list,currLeftInterval,new_key))
+				{
+					old_leaf->list = addToList(old_leaf->list,currLeftInterval,new_key);
+				}
+
 				new_leaf->rightInterval = currRightInterval;
 				new_leaf->leftInterval = new_key;
+
+				if (!intervalInList(new_leaf->list,new_key,currRightInterval))
+				{
+					new_leaf->list = addToList(new_leaf->list,new_key,currRightInterval);
+				}
+
 
 			}
 			else
@@ -560,6 +578,17 @@ int insert_balanced(m_tree_t *tree, key_t new_key,object_t *new_object,unsigned 
 				old_leaf->rightInterval = currRightInterval;
 				old_leaf->leftInterval = new_key;
 
+				if (!intervalInList(old_leaf->list,new_key,currRightInterval))
+				{
+					old_leaf->list = addToList(old_leaf->list,new_key,currRightInterval);
+				}
+
+
+				if (!intervalInList(new_leaf->list,currLeftInterval,new_key))
+				{
+					new_leaf->list = addToList(new_leaf->list,currLeftInterval,new_key);
+				}
+
 			}
 			tmp_node->height = 1;
 			tmp_node->rightmax = setRightMax(tmp_node);
@@ -567,10 +596,9 @@ int insert_balanced(m_tree_t *tree, key_t new_key,object_t *new_object,unsigned 
 			tmp_node->measure = tmp_node->right->key - tmp_node->left->key;
 			tmp_node->leftInterval = currLeftInterval;
 			tmp_node->rightInterval = currRightInterval;
-			if (!intervalInList(tmp_node->list,leftInterval,rightInterval))
+			if (!intervalInList(tmp_node->list,currLeftInterval,currRightInterval))
 			{
-				tmp_node->list = addToList(tmp_node->list,leftInterval,rightInterval);
-				new_leaf->list = addToList(new_leaf->list,leftInterval,rightInterval);
+				tmp_node->list = addToList(tmp_node->list,currLeftInterval,currRightInterval);
 			}
 
 			//tmp_node->measure = setMeasure(tmp_node);
@@ -665,13 +693,13 @@ int main()
 		{ 
 			int leftKey,rightKey;
 			scanf(" %d,%d", &leftKey,&rightKey);
-			_delete_balanced( searchtree,leftKey,leftKey,rightKey);
+			delete_interval( searchtree,leftKey,rightKey);
 		}
 		else if (nextop == 'p')
 		{
 			printf("\nPrinting Tree - \n");
 			printTree(searchtree,0);
-			printTreeList(searchtree);
+			//printTreeList(searchtree);
 		}
 	}
 
@@ -835,6 +863,7 @@ void insert_interval(m_tree_t *tree, int leftKey, int rightKey)
 	insert_balanced(tree, rightKey, &insobj,leftKey,rightKey );
 	//recursiveFixxer(tree);
 }
+
 void delete_interval(m_tree_t * tree, int leftKey, int rightKey)
 {
 	_delete_balanced(tree,leftKey,leftKey,rightKey);
@@ -954,14 +983,14 @@ void freeList(interval_node *list)
 {
 	interval_node *temp,*prev;
 	temp = prev = list;
-	if (temp->next == NULL)
-	{
-		free(temp);
-		temp = NULL;
-		return;
-	}
 	if (temp != NULL)
 	{
+		if (temp->next == NULL)
+		{
+			free(temp);
+			temp = NULL;
+			return;
+		}
 		prev = temp;
 		temp = temp->next;
 
@@ -1067,12 +1096,12 @@ void printTreeList(m_tree_t *node)
 	{
 		printTreeList(node->left);
 		printTreeList(node->right);
-		printf("\n %d: ",node->key);
+		printf("\n (%p) %d: ",(void *) &node->list ,node->key);
 		printList(node->list);
 	}
 	else
 	{
-		printf("\n %d: ",node->key);
+		printf("\n (%p) %d: ",(void *) &node->list ,node->key);
 		printList(node->list);
 	}
 }
@@ -1107,26 +1136,26 @@ void fixList(unsigned int key,interval_node *this_list,interval_node *other_list
 		temp = temp->next;
 	}
 
-	//temp = this_list;
-	//while (temp != NULL)
-	//{
-	//	l = temp->leftInterval;
-	//	r = temp->rightInterval;
-	//	if (key < l || key > r)
-	//	{
-	//		temp = temp->next;
-	//		deleteFromList(this_list,l,r);
-	//	}
-	//	else
-	//	{
-	//		temp = temp->next;
-	//	}
-	//}
+	temp = this_list;
+	while (temp != NULL)
+	{
+		l = temp->leftInterval;
+		r = temp->rightInterval;
+		if (key < l || key > r)
+		{
+			temp = temp->next;
+			deleteFromList(this_list,l,r);
+		}
+		else
+		{
+			temp = temp->next;
+		}
+	}
 }
 
 interval_node *cloneList(interval_node *list)
 {
-	interval_node *new_list,*temp;
+	interval_node *new_list;
 	new_list = (interval_node *) malloc(sizeof(interval_node));
 	new_list = appendList(new_list,list);
 	return new_list;
