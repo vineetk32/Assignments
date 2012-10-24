@@ -48,10 +48,11 @@ int setNodeMeasure(m_tree_t *tempNode);
 m_tree_t * get_node();
 
 int insert_balanced(m_tree_t *tree, key_t new_key,object_t *new_object, int other_key, int direction);
-object_t * delete_balanced(m_tree_t *tree, key_t delete_key, int otherkey, int direction);
+int delete_balanced(m_tree_t *tree, key_t delete_key, int otherkey, int direction);
 void printTreeList(m_tree_t *node);
 void printList(interval_node *node);
 void insert_interval(m_tree_t *tree, int leftKey, int rightKey);
+int list_length(interval_node *list);
 
 
 m_tree_t * create_m_tree()
@@ -99,6 +100,16 @@ void left_rotation(m_tree_t *n)
 
 	n->left->left = temp;
 	n->left->key = key;
+
+	n->left->rightInterval= n->key;
+	n->left->leftInterval= n->leftInterval;
+	n->left->leftmin = Min(n->left->left->leftmin,n->left->right->leftmin);
+	n->left->rightMax = Max(n->left->left->rightMax,n->left->right->rightMax);
+	n->leftmin = Min(n->left->leftmin,n->right->leftmin);
+	n->rightMax = Max(n->left->rightMax,n->right->rightMax);
+	n->left->measure = setNodeMeasure(n->left);
+	n->measure = setNodeMeasure(n);
+
 }
 
 void right_rotation(m_tree_t *n)
@@ -115,10 +126,23 @@ void right_rotation(m_tree_t *n)
 
 	n->right->right = temp;
 	n->right->key = key;
+	n->right->leftInterval= n->key;
+	n->right->rightInterval= n->rightInterval;
+
+	n->right->leftmin = Min(n->right->left->leftmin,n->right->right->leftmin);
+	n->right->rightMax = Max(n->right->left->rightMax,n->right->right->rightMax);
+
+	n->leftmin = Min(n->left->leftmin,n->right->leftmin);
+	n->rightMax = Max(n->left->rightMax,n->right->rightMax);
+
+	n->right->height = n->right->left->height + 1;
+	n->height = n->right->height + 1;
+	n->right->measure = setNodeMeasure(n->right);
+	n->measure = setNodeMeasure(n);
 }
 
 //Integrate
-int balanceTree()
+void balanceTree()
 {
 	int finished = 0;
 	int i;
@@ -132,42 +156,12 @@ int balanceTree()
 			if (tempNode->left->left->height - tempNode->right->height == 1)
 			{
 				right_rotation(tempNode);
-				tempNode->right->leftInterval= tempNode->key;
-				tempNode->right->rightInterval= tempNode->rightInterval;
-
-				tempNode->right->leftmin = Min(tempNode->right->left->leftmin,tempNode->right->right->leftmin);
-				tempNode->right->rightMax = Max(tempNode->right->left->rightMax,tempNode->right->right->rightMax);
-
-				tempNode->leftmin = Min(tempNode->left->leftmin,tempNode->right->leftmin);
-				tempNode->rightMax = Max(tempNode->left->rightMax,tempNode->right->rightMax);
-
-				tempNode->right->height = tempNode->right->left->height + 1;
-				tempNode->height = tempNode->right->height + 1;
-				tempNode->right->measure = setNodeMeasure(tempNode->right);
-				tempNode->measure = setNodeMeasure(tempNode);
 			}
 			else
 			{
 				left_rotation(tempNode->left);
-				tempNode->left->left->rightInterval= tempNode->left->key;
-				tempNode->left->left->leftInterval= tempNode->left->leftInterval;
-
-				tempNode->left->left->leftmin = Min(tempNode->left->left->left->leftmin,tempNode->left->left->right->leftmin);
-				tempNode->left->left->rightMax = Max(tempNode->left->left->left->rightMax,tempNode->left->left->right->rightMax);
-				tempNode->left->leftmin = Min(tempNode->left->left->leftmin,tempNode->left->right->leftmin);
-				tempNode->left->rightMax = Max(tempNode->left->left->rightMax,tempNode->left->right->rightMax);
-				tempNode->left->left->measure = setNodeMeasure(tempNode->left->left);
-				tempNode->left->measure = setNodeMeasure(tempNode->left);
 
 				right_rotation(tempNode);
-				tempNode->right->leftInterval= tempNode->key;
-				tempNode->right->rightInterval= tempNode->rightInterval;
-				tempNode->right->leftmin = Min(tempNode->right->left->leftmin,tempNode->right->right->leftmin);
-				tempNode->right->rightMax = Max(tempNode->right->left->rightMax,tempNode->right->right->rightMax);
-				tempNode->leftmin = Min(tempNode->left->leftmin,tempNode->right->leftmin);
-				tempNode->rightMax = Max(tempNode->left->rightMax,tempNode->right->rightMax);
-				tempNode->right->measure = setNodeMeasure(tempNode->right);
-				tempNode->measure = setNodeMeasure(tempNode);
 
 				tempHeight = tempNode->left->left->height;
 				tempNode->left->height = tempHeight + 1;
@@ -180,38 +174,14 @@ int balanceTree()
 			if (tempNode->right->right->height - tempNode->left->height == 1)
 			{
 				left_rotation(tempNode);
-				tempNode->left->rightInterval= tempNode->key;
-				tempNode->left->leftInterval= tempNode->leftInterval;
-				tempNode->left->leftmin = Min(tempNode->left->left->leftmin,tempNode->left->right->leftmin);
-				tempNode->left->rightMax = Max(tempNode->left->left->rightMax,tempNode->left->right->rightMax);
-				tempNode->leftmin = Min(tempNode->left->leftmin,tempNode->right->leftmin);
-				tempNode->rightMax = Max(tempNode->left->rightMax,tempNode->right->rightMax);
-				tempNode->left->measure = setNodeMeasure(tempNode->left);
-				tempNode->measure = setNodeMeasure(tempNode);
 				tempNode->left->height = tempNode->left->right->height + 1;
 				tempNode->height = tempNode->left->height + 1;
 			}
 			else
 			{
 				right_rotation(tempNode->right);
-				tempNode->right->right->leftInterval= tempNode->right->key;
-				tempNode->right->right->rightInterval= tempNode->right->rightInterval;
-				tempNode->right->right->leftmin = Min(tempNode->right->right->left->leftmin,tempNode->right->right->right->leftmin);
-				tempNode->right->right->rightMax = Max(tempNode->right->right->left->rightMax,tempNode->right->right->right->rightMax);
-				tempNode->right->leftmin = Min(tempNode->right->left->leftmin,tempNode->right->right->leftmin);
-				tempNode->right->rightMax = Max(tempNode->right->left->rightMax,tempNode->right->right->rightMax);
-				tempNode->right->right->measure = setNodeMeasure(tempNode->right->right);
-				tempNode->right->measure = setNodeMeasure(tempNode->right);
 
 				left_rotation(tempNode);
-				tempNode->left->rightInterval= tempNode->key;
-				tempNode->left->leftInterval= tempNode->leftInterval;
-				tempNode->left->leftmin = Min(tempNode->left->left->leftmin,tempNode->left->right->leftmin);
-				tempNode->left->rightMax = Max(tempNode->left->left->rightMax,tempNode->left->right->rightMax);
-				tempNode->leftmin = Min(tempNode->left->leftmin,tempNode->right->leftmin);
-				tempNode->rightMax = Max(tempNode->left->rightMax,tempNode->right->rightMax);
-				tempNode->left->measure = setNodeMeasure(tempNode->left);
-				tempNode->measure = setNodeMeasure(tempNode);
 
 				tempHeight = tempNode->right->right->height;
 				tempNode->left->height = tempHeight + 1;
@@ -336,24 +306,24 @@ void treeFixer()
 	}
 }
 
-int insert_balanced(m_tree_t *tree, key_t new_key,object_t *new_object, int other_key, int direction)
+int insert_balanced(m_tree_t *tree, key_t currIntervalEndpoint,object_t *new_object, int otherIntervalEndpoint, int direction)
 {
 	m_tree_t *tmp_node;
 	if (tree->left == NULL )
 	{
 		tree->left = (m_tree_t *) new_object;
-		tree->key = new_key;
+		tree->key = currIntervalEndpoint;
 		tree->right = NULL;
 		tree->leftInterval = NEGATIVE_INFINITY;
 		tree->rightInterval = INFINITY;
 
 		tree->list = (interval_node *) malloc(sizeof(interval_node));
-		tree->list->rightInterval = other_key;
-		tree->list->leftInterval = new_key;
+		tree->list->rightInterval = otherIntervalEndpoint;
+		tree->list->leftInterval = currIntervalEndpoint;
 
 
-		tree->leftmin = new_key;
-		tree->rightMax = other_key;
+		tree->leftmin = currIntervalEndpoint;
+		tree->rightMax = otherIntervalEndpoint;
 		tree->measure = setLeafMeasure(tree);
 		tree->list->next = NULL;
 	}
@@ -365,7 +335,7 @@ int insert_balanced(m_tree_t *tree, key_t new_key,object_t *new_object, int othe
 		{
 			traversalHistory[numTraversals] = tmp_node;
 			numTraversals++;
-			if (new_key < tmp_node->key)
+			if (currIntervalEndpoint < tmp_node->key)
 			{
 				tmp_node = tmp_node->left;
 			}
@@ -374,20 +344,20 @@ int insert_balanced(m_tree_t *tree, key_t new_key,object_t *new_object, int othe
 				tmp_node = tmp_node->right;
 			}
 		}
-		if (tmp_node->key == new_key)
+		if (tmp_node->key == currIntervalEndpoint)
 		{
 			interval_node *temp, *newnode;
 			temp = tmp_node->list;
 			newnode = (interval_node*) malloc(sizeof(interval_node));
 			if (direction == 1)
 			{
-				newnode->rightInterval = other_key;
-				newnode->leftInterval = new_key;
+				newnode->rightInterval = otherIntervalEndpoint;
+				newnode->leftInterval = currIntervalEndpoint;
 			}
 			else
 			{
-				newnode->rightInterval = new_key;
-				newnode->leftInterval = other_key;
+				newnode->rightInterval = currIntervalEndpoint;
+				newnode->leftInterval = otherIntervalEndpoint;
 			}
 
 			tmp_node->list = newnode;
@@ -423,7 +393,7 @@ int insert_balanced(m_tree_t *tree, key_t new_key,object_t *new_object, int othe
 
 			new_leaf = get_node();
 			new_leaf->left = (m_tree_t *) new_object;
-			new_leaf->key = new_key;
+			new_leaf->key = currIntervalEndpoint;
 			new_leaf->right = NULL;
 			new_leaf->height = 0;
 			new_leaf->list = (interval_node*) malloc(sizeof(interval_node));
@@ -431,35 +401,42 @@ int insert_balanced(m_tree_t *tree, key_t new_key,object_t *new_object, int othe
 
 			if (direction == 1)
 			{
-				new_leaf->list->leftInterval = new_key;
-				new_leaf->list->rightInterval = other_key;
-				new_leaf->leftmin = new_key;
-				new_leaf->rightMax = other_key;
+				new_leaf->list->leftInterval = currIntervalEndpoint;
+				new_leaf->list->rightInterval = otherIntervalEndpoint;
+
+				new_leaf->leftmin = currIntervalEndpoint;
+				new_leaf->rightMax = otherIntervalEndpoint;
 			}
 			else
 			{
-				new_leaf->list->leftInterval = other_key;
-				new_leaf->list->rightInterval = new_key;
-				new_leaf->leftmin = other_key;
-				new_leaf->rightMax = new_key;
+				new_leaf->list->leftInterval = otherIntervalEndpoint;
+				new_leaf->list->rightInterval = currIntervalEndpoint;
+
+				new_leaf->leftmin = otherIntervalEndpoint;
+				new_leaf->rightMax = currIntervalEndpoint;
 			}
 
-			if (tmp_node->key < new_key)
+			if (tmp_node->key < currIntervalEndpoint)
 			{
 				tmp_node->left = old_leaf;
 				tmp_node->right = new_leaf;
-				tmp_node->key = new_key;
-				old_leaf->rightInterval = tmp_node->key;
+				tmp_node->key = currIntervalEndpoint;
+
 				new_leaf->leftInterval = tmp_node->key;
 				new_leaf->rightInterval = tmp_node->rightInterval;
+
+				old_leaf->rightInterval = tmp_node->key;
+
 			}
 			else
 			{
 				tmp_node->left = new_leaf;
 				tmp_node->right = old_leaf;
-				old_leaf->leftInterval = tmp_node->key;
+
 				new_leaf->leftInterval = tmp_node->leftInterval;
 				new_leaf->rightInterval = tmp_node->rightInterval;
+
+				old_leaf->leftInterval = tmp_node->key;
 			}
 			new_leaf->measure = setLeafMeasure(new_leaf);
 			old_leaf->measure = setLeafMeasure(old_leaf);
@@ -469,6 +446,7 @@ int insert_balanced(m_tree_t *tree, key_t new_key,object_t *new_object, int othe
 
 			tmp_node->measure = setNodeMeasure(tmp_node);
 			tmp_node->height = 1;
+
 			treeFixer();
 			balanceTree();
 		}
@@ -476,28 +454,30 @@ int insert_balanced(m_tree_t *tree, key_t new_key,object_t *new_object, int othe
 	return 0;
 }
 
-object_t *delete_balanced(m_tree_t *tree, key_t delete_key, int other_key, int direction)
+int delete_balanced(m_tree_t *tree, key_t currEndpoint, int otherEndpoint, int direction)
 {
 	m_tree_t *tmp_node, *upper_node, *other_node;
 	interval_node *temp,*prev, *del, *prevdel;
 	object_t *deleted_object;
 	int minNode, maxNode;
+
 	if (tree->left == NULL )
 	{
 		return (NULL );
 	}
 	else if (tree->right == NULL )
 	{
-		if (tree->key == delete_key)
+		if (tree->key == currEndpoint)
 		{
 			deleted_object = (object_t *) tree->left;
 			tree->left = NULL;
 			tree->measure = 0;
 			tree->list = NULL;
-			return (deleted_object);
+
+			return 1;
 		}
 		else
-		return (NULL );
+			return 0;
 	}
 	else
 	{
@@ -510,7 +490,7 @@ object_t *delete_balanced(m_tree_t *tree, key_t delete_key, int other_key, int d
 			//printTreeList(tmp_node);
 			numTraversals++;
 			upper_node = tmp_node;
-			if (delete_key < tmp_node->key)
+			if (currEndpoint < tmp_node->key)
 			{
 				tmp_node = upper_node->left;
 				other_node = upper_node->right;
@@ -523,14 +503,14 @@ object_t *delete_balanced(m_tree_t *tree, key_t delete_key, int other_key, int d
 			//printf("\nState of lists at this stage - ");
 			//printTreeList(tmp_node);
 		}
-		if (tmp_node->key != delete_key)
+		if (tmp_node->key != currEndpoint)
 		{
 			return (NULL );
 		}
 		else
 		{
-			int found,count;
-			found = count = 0;
+			int foundInterval,count;
+			foundInterval = count = 0;
 			temp = tmp_node->list;
 
 			prev = del = prevdel = NULL;
@@ -539,30 +519,31 @@ object_t *delete_balanced(m_tree_t *tree, key_t delete_key, int other_key, int d
 			{
 				count++;
 
-				if (direction == 1)
+				if (direction == 2)
 				{
-					if ((temp->leftInterval == delete_key) && (temp->rightInterval == other_key))
+					if ((temp->leftInterval == otherEndpoint) && (temp->rightInterval == currEndpoint))
 					{
 						prevdel = prev;
 						del = temp;
 
-						found = 1;
+						foundInterval = 1;
 					}
 				}
-				else
+				else if (direction == 1)
 				{
-					if ((temp->leftInterval == other_key) && (temp->rightInterval == delete_key))
+					if ((temp->leftInterval == currEndpoint) && (temp->rightInterval == otherEndpoint))
 					{
 						prevdel = prev;
 						del = temp;
-						found = 1;
+
+						foundInterval = 1;
 					}
 				}
 
 				prev = temp;
 				temp = temp->next;
 			}
-			if (found == 0)
+			if (foundInterval == 0)
 			{
 				return 0;
 			}
@@ -580,10 +561,11 @@ object_t *delete_balanced(m_tree_t *tree, key_t delete_key, int other_key, int d
 
 				if(other_node->right != NULL)
 				{
-					upper_node->left->leftInterval = upper_node->leftInterval;
-					upper_node->left->measure = setLeafMeasure(upper_node->left);
 					upper_node->right->rightInterval = upper_node->rightInterval;
 					upper_node->right->measure = setLeafMeasure(upper_node->right);
+
+					upper_node->left->leftInterval = upper_node->leftInterval;
+					upper_node->left->measure = setLeafMeasure(upper_node->left);
 					upper_node->measure = setNodeMeasure(upper_node);
 				}
 				else
@@ -591,13 +573,15 @@ object_t *delete_balanced(m_tree_t *tree, key_t delete_key, int other_key, int d
 					upper_node->measure = setLeafMeasure(upper_node);
 				}
 				numTraversals--;
+
 				treeFixer();
 				balanceTree();
 
 				deleted_object = (object_t *) tmp_node->left;
+
 				return_node(tmp_node);
 				return_node(other_node);
-				return (deleted_object);
+				return 1;
 			}
 			if (prevdel != NULL )
 			{
@@ -628,7 +612,7 @@ object_t *delete_balanced(m_tree_t *tree, key_t delete_key, int other_key, int d
 			}*/
 		}
 	}
-	return (object_t *) 1;
+	return 1;
 }
 
 void remove_tree(m_tree_t *tree)
@@ -822,4 +806,15 @@ int main()
 	return(0);
 }
 #endif
+
+int list_length(interval_node *list)
+{
+	interval_node *temp;
+	int length = 0;
+	while (temp != NULL)
+	{
+		temp = temp->next;
+		length++;
+	}
+}
 
