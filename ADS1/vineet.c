@@ -3,7 +3,7 @@
 #include <string.h>
 
 
-#define BLOCKSIZE 4096
+#define BLOCKSIZE 256
 
 typedef int key_t;
 typedef int object_t;
@@ -199,34 +199,36 @@ void right_rotation(tree_node_t *n)
 {
 	tree_node_t *tmp_node;
 	key_t tmp_key;
+	int changed;
 	tmp_node = n->right;
 	tmp_key = n->key;
+	changed = n->left->right->key;
 	n->right = n->left;
 	n->key = n->left->key;
 	n->left = n->right->left;
 	n->right->left = n->right->right;
 	n->right->right = tmp_node;
-	n->right->key = tmp_key;
-
-	update_leafcount(n);
-	update_leafcount(n->right);
+	n->right->key = tmp_key - n->key + changed;
+	n->left->key = n->key - changed;
+	n->key = tmp_key;
 }
 
 void left_rotation(tree_node_t *n)
 {
 	tree_node_t *tmp_node;
 	key_t tmp_key;
+	int changed;
 	tmp_node = n->left;
 	tmp_key = n->key;
+	changed = n->right->left->key;
 	n->left = n->right;
 	n->key = n->right->key;
 	n->right = n->left->right;
 	n->left->right = n->left->left;
 	n->left->left = tmp_node;
-	n->left->key = tmp_key;
-
-	update_leafcount(n);
-	update_leafcount(n->left);
+	n->left->key = tmp_key - n->key + changed;
+	n->right->key = n->key - changed;
+	n->key = tmp_key;
 
 }
 
@@ -285,7 +287,7 @@ tree_node_t *get_node()
 		tmp = currentblock++;
 		size_left -= 1;
 	}
-	tmp->left_leaves = tmp->right_leaves = 0;
+	//tmp->left_leaves = tmp->right_leaves = 0;
 	return( tmp );
 }
 
@@ -299,30 +301,13 @@ void return_node(tree_node_t *node)
 stack_t *get_node_st()
 { 
 	stack_t *tmp;
-	nodes_taken_st += 1;
-	if( free_list_st != NULL )
-	{  
-		tmp = free_list_st;
-		free_list_st = free_list_st -> next;
-	}
-	else
-	{  
-		if( currentblock_st == NULL || size_left_st == 0)
-		{  
-			currentblock_st = (stack_t *) malloc( BLOCKSIZE * sizeof(stack_t) );
-			size_left_st = BLOCKSIZE;
-		}
-		tmp = currentblock_st++;
-		size_left_st -= 1;
-	}
+	tmp = (stack_t *) malloc(sizeof(stack_t));
 	return( tmp );
 }
 
 void return_node_st(stack_t *node)
 {
-	node->next = free_list_st;
-	free_list_st = node;
-	nodes_returned_st +=1;
+	free(node);
 }
 
 list_t *currentblock_list = NULL;
@@ -336,37 +321,13 @@ int nodes_returned_list = 0;
 list_t *get_string()
 { 
 	list_t *tmp;
-	nodes_taken_list += 1;
-	if( free_list_list != NULL )
-	{
-		tmp = free_list_list;
-		//tmp->data = (char *) malloc (BLOCKSIZE_STRING * sizeof(char));
-		tmp->data = NULL;
-		if (tmp->data == NULL)
-		{
-			printf("\nMemory allocation for tmp->data failed!");
-		}
-		free_list_list = free_list_list -> next;
-	}
-	else
-	{
-		if( currentblock_list == NULL || size_left_list == 0)
-		{
-			currentblock_list = (list_t *) malloc( BLOCKSIZE * sizeof(list_t *) );
-			size_left = BLOCKSIZE;
-		}
-		tmp = currentblock_list++;
-		size_left -= 1;
-	}
+	tmp = (list_t *)malloc(sizeof(list_t));
 	return(tmp);
 }
 
 void return_string(list_t *node)
 {
-	free(node->data);
-	node->next = NULL;
-	free_list_list->next = node;
-	nodes_returned_list +=1;
+	free(node);
 }
 
 tree_node_t *create_tree(void)
@@ -529,12 +490,12 @@ void remove_text(text_t *text)
 
 int length_text(text_t *txt)
 {
-	if (txt->searchtree->right == NULL)
+	if (txt->searchtree->left == NULL)
 	{
-		return 1;
+		return 0;
 	}
 	else
-		return (txt->searchtree->left_leaves + txt->searchtree->right_leaves);
+		return (txt->searchtree->key);
 }
 
 int actual_index(text_t *txt,int line_num)
@@ -564,7 +525,6 @@ char *get_line(text_t *txt,unsigned int index)
 {
 	tree_node_t *tmp_node,*last_node;
 	tmp_node = txt->searchtree;
-	last_node = tmp_node;
 
 	if( tmp_node->left == NULL )
 		return(NULL);
@@ -572,18 +532,14 @@ char *get_line(text_t *txt,unsigned int index)
 	{
 		while( tmp_node->right != NULL )
 		{
-			if (tmp_node != txt->searchtree)
+
+			if ( index <= tmp_node->left->key )
 			{
-				tmp_node->key = fix_child_key(last_node,tmp_node);
-			}
-			if ( index < tmp_node->key )
-			{
-				last_node = tmp_node;
 				tmp_node = tmp_node->left;
 			}
 			else
 			{
-				last_node = tmp_node;
+				index = index - tmp_node->left->key;
 				tmp_node = tmp_node->right;
 			}
 		}
@@ -628,12 +584,49 @@ void append_line(text_t *txt,char *new_line)
 
 char *set_line(text_t *txt,int index,char *new_line)
 {
-	return NULL;
+	tree_node_t *tree;
+	tree = txt->searchtree;
+	if( tree->left == NULL )
+	{
+		return NULL;
+	}
+	else
+	{
+		tree_node_t *tmp_node;
+		tmp_node = tree;
+		while( tmp_node->right != NULL )
+		{
+			if( index <= tmp_node->left->key )
+				tmp_node = tmp_node->left;
+			else
+			{
+				index = index - tmp_node->left->key;
+				tmp_node = tmp_node->right;
+			}
+			
+		}
+		if( tmp_node->key == index )
+		{
+			char *line;
+			line = ((list_t *) (tmp_node->left))->data;
+			//free(line);
+			((list_t *) (tmp_node->left))->data = strdup(new_line);
+			return line;
+		}
+		else
+		{
+			return NULL;
+		}
+	}
 }
-
+object_t *_delete_balanced(tree_node_t *tree, key_t delete_key);
 char *delete_line(text_t *txt,int index)
 {
-	return NULL;
+	if(txt == NULL)
+		return NULL;
+	if(txt->searchtree == NULL)
+		return NULL;
+	return (char *)((list_t *)_delete_balanced(txt->searchtree,(key_t) index))->data;
 }
 
 object_t *_delete_balanced(tree_node_t *tree, key_t delete_key)
@@ -663,13 +656,14 @@ object_t *_delete_balanced(tree_node_t *tree, key_t delete_key)
 		{
 			push(tmp_node,stack);
 			upper_node = tmp_node;
-			if( delete_key < tmp_node->key )
+			if( delete_key <= tmp_node->left->key )
 			{  
 				tmp_node   = upper_node->left; 
 				other_node = upper_node->right;
 			} 
 			else
 			{
+				delete_key = delete_key  - tmp_node->left->key;
 				tmp_node   = upper_node->right; 
 				other_node = upper_node->left;
 			} 
@@ -681,6 +675,7 @@ object_t *_delete_balanced(tree_node_t *tree, key_t delete_key)
 			upper_node->key   = other_node->key;
 			upper_node->left  = other_node->left;
 			upper_node->right = other_node->right;
+			upper_node->height = 0;
 			deleted_object = (object_t *) tmp_node->left;
 			return_node( tmp_node );
 			return_node( other_node );
@@ -698,6 +693,7 @@ object_t *_delete_balanced(tree_node_t *tree, key_t delete_key)
 		{
 			int tmp_height, old_height;
 			tmp_node = pop(stack);
+			tmp_node->key = tmp_node->left->key + tmp_node->right->key;
 			old_height= tmp_node->height;
 			if( tmp_node->left->height - tmp_node->right->height == 2 )
 			{
@@ -861,16 +857,15 @@ int insert_balanced(tree_node_t *tree, key_t new_key,object_t *new_object)
 		last_node = tmp_node;
 		while( tmp_node->right != NULL )
 		{
-			if (tmp_node != tree)
-			{
-				tmp_node->key = fix_child_key(last_node,tmp_node);
-			}
 			push(tmp_node,stack);
 			last_node = tmp_node;
-			if( new_key < tmp_node->key )
+			if( new_key <= tmp_node->left->key )
 				tmp_node = tmp_node->left;
 			else
+			{
+				new_key = new_key - tmp_node->left->key;
 				tmp_node = tmp_node->right;
+			}
 			
 		}
 		/* found the candidate leaf. Test whether key distinct */
@@ -878,9 +873,6 @@ int insert_balanced(tree_node_t *tree, key_t new_key,object_t *new_object)
 		{
 			tree_node_t *old_leaf, *new_leaf;
 			old_leaf = get_node();
-
-			tmp_node->key++;
-			//printf("\ntmp_node->left:%s",((list_t *)tmp_node->left)->data);
 			old_leaf->left = tmp_node->left;
 			old_leaf->key = tmp_node->key;
 			old_leaf->right= NULL;
@@ -888,20 +880,15 @@ int insert_balanced(tree_node_t *tree, key_t new_key,object_t *new_object)
 
 			new_leaf = get_node();
 			new_leaf->left = (tree_node_t *) new_object;
-			new_leaf->key = new_key;
+			new_leaf->key = 1;
 			new_leaf->right = NULL;
 			new_leaf->height = 0;
 
 			tmp_node->left = new_leaf;
 			tmp_node->right = old_leaf;
 			tmp_node->height = 1;
+			tmp_node->key = new_leaf->key + old_leaf->key;
 
-			new_leaf->left_leaves = new_leaf->right_leaves = 0;
-			old_leaf->left_leaves = old_leaf->right_leaves = 0;
-
-			update_leafcount(tmp_node);
-			inserted_key = new_key;
-			last_node = tmp_node;
 		}
 		else 
 		{
@@ -914,41 +901,23 @@ int insert_balanced(tree_node_t *tree, key_t new_key,object_t *new_object)
 
 			new_leaf = get_node();
 			new_leaf->left = (tree_node_t *) new_object;
-			new_leaf->key = new_key;
+			new_leaf->key = 1;
 			new_leaf->right = NULL;
 			new_leaf->height = 0;
-			new_leaf->left_leaves = new_leaf->right_leaves = 0;
-			old_leaf->left_leaves = old_leaf->right_leaves = 0;
-
-			if ( tmp_node->key < new_key )
-			{
-				tmp_node->left = old_leaf;
-				tmp_node->right = new_leaf;
-				tmp_node->key = new_key;
-			}
-			else
-			{
-				tmp_node->left = new_leaf;
-				tmp_node->right = old_leaf;
-			}
-			tmp_node->left_leaves = tmp_node->right_leaves = 1;
+			tmp_node->left = old_leaf;
+			tmp_node->right = new_leaf;
+			tmp_node->key = new_leaf->key + old_leaf->key;
 			tmp_node->height = 1;
-			last_node = tmp_node;
 		}
 		/* rebalance */
-		//finished = 0;
-		if (!stack_empty(stack))
-		{
-			print_stack(stack);
-		}
 
-		//printf("\nTree before fixing - \n");
-		//printTree(tree,0);
 		while( !stack_empty(stack))// && !finished )
 		{
 			int tmp_height, old_height;
 			tmp_node = pop(stack);
+			tmp_node->key = tmp_node->left->key + tmp_node->right->key;
 			old_height= tmp_node->height;
+			
 			if( tmp_node->left->height - tmp_node->right->height == 2 )
 			{
 				if( tmp_node->left->left->height - tmp_node->right->height == 1 )
@@ -996,15 +965,7 @@ int insert_balanced(tree_node_t *tree, key_t new_key,object_t *new_object)
 					tmp_node->height = tmp_node->right->height + 1;
 				}
 			}
-			update_leafcount(tmp_node);
-			//printf("\nSet %d's leaves as %d,%d",tmp_node->key,tmp_node->left_leaves,tmp_node->right_leaves);
-			//if (tmp_node->key > inserted_key)
-			//{
-				tmp_node->key = fix_parent_key(tmp_node,last_node);
-			//}
-			last_node = tmp_node;
-			//if( tmp_node->height == old_height )
-			//finished = 1;
+
 		}
 		remove_stack(stack);
 	}
@@ -1121,15 +1082,13 @@ int main()
 	append_line(txt1, "line hundred" );
 	insert_line(txt1, 2, "line ninetynine" );
 	insert_line(txt1, 2, "line ninetyeight" );
-	printTree(txt1->searchtree,0);
 	insert_line(txt1, 2, "line ninetyseven" );
 	insert_line(txt1, 2, "line ninetysix" );
 	insert_line(txt1, 2, "line ninetyfive" );
 	//printTree(txt1->searchtree,0);
-	printf("found at line 2:   %s\n",get_line(txt1,  2));
+
 	for( i = 2; i < 95; i++ )
 	{
-		//printf("\nNumber of lines: %d\n",length_text(txt1));
 		insert_line(txt1, 2, "some filler line between 1 and 95" );
 	}
 	if ((tmp = length_text(txt1)) != 100)
@@ -1141,8 +1100,8 @@ int main()
 	printf("found at line 2:   %s\n",get_line(txt1,  2));
 	printf("found at line 99:  %s\n",get_line(txt1, 99));
 	printf("found at line 100: %s\n",get_line(txt1,100));
-	for ( i=1; i<=10000; i++)
-	{
+	for(i=1; i<=10000; i++)
+	{  
 		if( i%2==1 )
 			append_line(txt2, "A");
 		else 
@@ -1151,13 +1110,13 @@ int main()
 	if( (tmp = length_text(txt2)) != 10000)
 	{  
 		printf("Test 3: length should be 10000, is %d\n", tmp);
-		//exit(-1);
+		exit(-1);
 	}
 	c = get_line(txt2, 9876 );
 	if( *c != 'B')
 	{  
 		printf("Test 4: line 9876 of txt2 should be B, found %s\n", c);
-		//exit(-1);
+		exit(-1);
 	}
 	for( i= 10000; i > 1; i-=2 )
 	{  
@@ -1165,7 +1124,7 @@ int main()
 		if( *c != 'B')
 		{  
 			printf("Test 5: line %d of txt2 should be B, found %s\n", i, c);
-			//exit(-1);
+			exit(-1);
 		}
 		append_line( txt2, c );
 	}
@@ -1175,7 +1134,7 @@ int main()
 		if( *c != 'A')
 		{  
 			printf("Test 6: line %d of txt2 should be A, found %s\n", i, c);
-			//exit(-1);
+			exit(-1);
 		}
 	}
 	for( i=1; i<= 5000; i++ )
@@ -1186,13 +1145,12 @@ int main()
 		if( *c != 'B')
 		{  
 			printf("Test 7: line %d of txt2 should be B, found %s\n", i, c); 
-			//exit(-1);
+			exit(-1);
 		}
 	}
 	set_line(txt1, 100, "the last line");
 	for( i=99; i>=1; i-- )
 		delete_line(txt1, i );
 	printf("found at the last line:   %s\n",get_line(txt1,  1));
-
 }
 
