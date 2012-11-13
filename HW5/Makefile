@@ -1,5 +1,5 @@
 #EXTRA_CFLAGS = -lrt -lpthread -O2 -lm
-EXTRA_CFLAGS = -lrt -lpthread -ggdb -lm
+EXTRA_CFLAGS = -lrt -lpthread -ggdb -lm -Wall
 
 info:
 	echo "There is no 'default' target defined. Run make a3 to generate the a3"

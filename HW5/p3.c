@@ -19,7 +19,7 @@ int main(int argc, char **argv)
 	myHashTable_t wordCount,fileCount;
 	collidedEntry_t *wordCollisions,*fileCollisions;
 	int numWordCollisions = 0, systemLogLevel, numFileCollisions = 0;
-	int i, fileSplit;
+	int i;
 	FILE *fCorpus,*fFileList,*fdataFile;
 	int numWords,fileSize;
 	char **corpusWords;
@@ -27,7 +27,7 @@ int main(int argc, char **argv)
 	char *fileContents;
 	pthread_t threads[NUM_THREADS];
 	threadPackage_t threadPackages[NUM_THREADS];
-	pthread_mutex_t mutex;
+	unsigned int mutex;
 
 #ifndef _WIN32
 		struct timespec start_time,end_time;
@@ -42,8 +42,6 @@ int main(int argc, char **argv)
 	fileCollisions = (collidedEntry_t *) malloc (sizeof(collidedEntry_t) * 512);
 
 	corpusWords = (char **) malloc (sizeof(char *) * MAX_CORPUS_WORDS);
-	
-
 	for (i = 0; i < MAX_CORPUS_WORDS; i++)
 	{
 		corpusWords[i] = (char *) malloc (sizeof(char) * MAX_CORPUS_WORD_SIZE);
@@ -71,7 +69,6 @@ int main(int argc, char **argv)
 	while (fgets(tempBuff,SMALL_BUFFER_SIZE,fCorpus) != NULL)
 	{
 		tempBuff[strlen(tempBuff) - 1] = '\0';
-		//addToList(&countryList,tempBuff,strlen(tempBuff)+1);
 		strcpy(corpusWords[i],tempBuff);
 		tempBuff[0] = '\0';
 		addToHashTable(&wordCount,corpusWords[i],wordCollisions,&numWordCollisions);
@@ -101,7 +98,7 @@ int main(int argc, char **argv)
 
 	i = 0;
 	
-	pthread_mutex_init(&mutex,NULL);
+	//pthread_mutex_init(&mutex,NULL);
 
 	while (fgets(tempBuff,SMALL_BUFFER_SIZE,fFileList) != NULL)
 	{
@@ -133,6 +130,7 @@ int main(int argc, char **argv)
 			threadPackages[i].corpusTable = &wordCount;
 			threadPackages[i].corpusWords = corpusWords;
 			threadPackages[i].fileCollisions = fileCollisions;
+			threadPackages[i].corpusCollisions = wordCollisions;
 			threadPackages[i].fileTable = &fileCount;
 			threadPackages[i].numCorpusCollisions = &numWordCollisions;
 			threadPackages[i].numFileCollisions = &numFileCollisions;
@@ -155,9 +153,9 @@ int main(int argc, char **argv)
 			{
 				threadPackages[i].end = threadPackages[i].start + fileSize / NUM_THREADS;
 			}
-//#ifdef DEBUG
+#ifdef DEBUG
 			printf("\nThread %d: Start: %d, End %d, fileSize - %d",i,threadPackages[i].start,threadPackages[i].end,fileSize);
-//#endif
+#endif
 
 			pthread_create(&threads[i],NULL,threadFunc,((void *) &threadPackages[i]));
 		}
@@ -169,7 +167,7 @@ int main(int argc, char **argv)
 		free(fileContents);
 	}
 
-	pthread_mutex_destroy(&mutex);
+	//pthread_mutex_destroy(&mutex);
 
 #ifndef _WIN32
 		clock_gettime(CLOCK_MONOTONIC,&end_time);
@@ -194,7 +192,7 @@ int main(int argc, char **argv)
 			printf("\n%s:%d:%d",wordCount.entries[i].key,--wordCount.entries[i].value,fileCount.entries[i].value);
 		}
 	}
-	printf("\n%d:%d:",totalFiles,totalWords);
+	printf("\n%d:%d:",totalWords,totalFiles);
 	for(i = 0; i < BUCKET_SIZE; i++)
 	{
 		if (wordCount.entries[i].value != 0)
@@ -208,7 +206,7 @@ int main(int argc, char **argv)
 #else
 	printf("\nCPUTime:");
 #endif
-	printf("\nGPUTime:");
+	printf("\nGPUTime: 0.0\n");
 	return 0;
 }
 
@@ -291,7 +289,7 @@ unsigned long hashFunction(char *str)
 	return hash;
 }
 
-void actualWorkFunction(char *dataBuff,int start,int end,myHashTable_t *table, collidedEntry_t *collisions, int *numCollisions,char **corpusWords,int numWords,myHashTable_t *fileHash,collidedEntry_t *fileCollisions, int *numFileCollisions, pthread_mutex_t *mutex)
+void actualWorkFunction(char *dataBuff,int start,int end,myHashTable_t *table, collidedEntry_t *collisions, int *numCollisions,char **corpusWords,int numWords,myHashTable_t *fileHash,collidedEntry_t *fileCollisions, int *numFileCollisions, unsigned int *mutex)
 {
 	char tempBuff[MEDIUM_BUFFER_SIZE] = {'\0'};
 	int i, j = 0;
@@ -316,24 +314,25 @@ void actualWorkFunction(char *dataBuff,int start,int end,myHashTable_t *table, c
 			if ( (wordIndex = arrayContains(corpusWords,tempBuff,numWords)) >= 0)
 			{
 #ifdef DEBUG
-				printf("\nFound %s ending at %d\n",corpusWords[wordIndex],i);
+				//Too debug-ey even for debug
+				//printf("\nFound %s ending at %d\n",corpusWords[wordIndex],i);
 #endif
-				pthread_mutex_lock(mutex);
+				my_lock(mutex);
 				addToHashTable(table,tempBuff,collisions,numCollisions);
-				pthread_mutex_unlock(mutex);
+				my_unlock(mutex);
 				if (changedThisTime[wordIndex] == 0)
 				{
 					//TODO: Add a collision set for fileHash
-					pthread_mutex_lock(mutex);
+					my_lock(mutex);
 					addToHashTable(fileHash,tempBuff,fileCollisions,numFileCollisions);
-					pthread_mutex_unlock(mutex);
+					my_unlock(mutex);
 					changedThisTime[wordIndex] = 1;
 				}
 			}
 			memset(tempBuff,0,MEDIUM_BUFFER_SIZE);
-			pthread_mutex_lock(mutex);
+			my_lock(mutex);
 			totalWords++;
-			pthread_mutex_unlock(mutex);
+			my_unlock(mutex);
 		}
 		else if (dataBuff[i] != '\n')
 		{
@@ -354,4 +353,52 @@ void printHashTable(myHashTable_t *table)
 		}
 	}
 	printf("\n=========================================");
+}
+
+
+int __test_test_and_set(unsigned int *lock)
+{
+	// Test and set call. 100 tries.
+	int counter = 100;
+	while (counter > 0)
+	{
+		while ( *lock == MUTEX_LOCKED);
+		if (__test_and_set(lock)  == MUTEX_UNLOCKED)
+		{
+			return 0;
+		}
+		counter--;
+	}
+	return -1;
+}
+
+//The lock code is from the HW3 group submission.
+int my_lock(unsigned int *mutex)
+{
+	int status = __test_test_and_set(mutex);
+	while (status == -1){
+		// If locked, wait on mutex to become unlocked.
+		// this condition will happen only if 100 tries in the 
+		// test-test and set fails.
+		sleep(1);
+		__test_test_and_set(mutex);
+	}
+	 if(status == 0)
+	{
+		// The test_test_and_set returns 0 when the lcok was previously
+		// not set and now it is set. i.e. lock has been acquired.
+		return 0;
+	}
+}
+
+int my_unlock(unsigned int *mutex)
+{
+	// Change mutex value to UNLOCKED
+	*mutex = MUTEX_UNLOCKED;
+	return 0;
+}
+
+int __test_and_set(unsigned int *mutex)
+{
+	return compare_and_swap(mutex,MUTEX_LOCKED,MUTEX_UNLOCKED);
 }
